@@ -29,7 +29,7 @@ public class DesktopModLoader extends ModLoader{
             method.invoke(classLoader, file.file().toURI().toURL());
 
             Class<?> main = Class.forName(meta.main);
-            return new Mod(meta, (ModBase)main.newInstance());
+            return new Mod(file, meta, (ModBase)main.newInstance());
         }catch(IOException e){
             throw e;
         }catch(Exception e){

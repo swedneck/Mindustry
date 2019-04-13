@@ -64,7 +64,7 @@ public class AndroidLauncher extends AndroidApplication{
 
                             ClassLoader cl = new DexClassLoader(file.file().getAbsolutePath(), getFilesDir().getAbsolutePath(), null, getClass().getClassLoader());
                             Class<?> main = cl.loadClass(meta.main);
-                            return new Mod(meta, (ModBase)main.newInstance());
+                            return new Mod(file, meta, (ModBase)main.newInstance());
                         }catch(IOException e){
                             throw e;
                         }catch(Exception e){
