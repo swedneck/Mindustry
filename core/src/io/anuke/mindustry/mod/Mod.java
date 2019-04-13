@@ -5,7 +5,7 @@ public class Mod{
     public final ModBase listener;
     public final Class<?> mainClass;
 
-    protected boolean enabled;
+    protected boolean enabled = true;
     protected boolean requiresRestart = true;
 
     public Mod(ModMeta meta, ModBase listener){
@@ -40,7 +40,7 @@ public class Mod{
     }
 
     public static class ModMeta{
-        public String name, author, mainClass;
+        public String name, author, main, description;
         public int version;
         public ModDependency[] dependencies;
     }

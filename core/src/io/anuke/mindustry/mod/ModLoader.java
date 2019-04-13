@@ -31,7 +31,7 @@ public class ModLoader{
             method.setAccessible(true);
             method.invoke(classLoader, file.file().toURI().toURL());
 
-            Class<?> main = Class.forName(meta.mainClass);
+            Class<?> main = Class.forName(meta.main);
             return new Mod(meta, (ModBase)main.newInstance());
         }catch(IOException e){
             throw e;

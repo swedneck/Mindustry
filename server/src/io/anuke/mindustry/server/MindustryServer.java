@@ -1,15 +1,16 @@
 package io.anuke.mindustry.server;
 
-import io.anuke.arc.ApplicationListener;
-import io.anuke.arc.Core;
+import io.anuke.arc.*;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.core.*;
 import io.anuke.mindustry.game.Content;
+import io.anuke.mindustry.game.EventType.GameLoadEvent;
 import io.anuke.mindustry.io.BundleLoader;
+import io.anuke.mindustry.mod.Mod;
 
 import static io.anuke.mindustry.Vars.*;
 
-public class MindustryServer implements ApplicationListener{
+public class MindustryServer extends ApplicationCore{
     private String[] args;
 
     public MindustryServer(String[] args){
@@ -17,7 +18,7 @@ public class MindustryServer implements ApplicationListener{
     }
 
     @Override
-    public void init(){
+    public void setup(){
         Core.settings.setDataDirectory(Core.files.local("config"));
         Vars.init();
 
@@ -27,11 +28,22 @@ public class MindustryServer implements ApplicationListener{
         content.verbose(false);
         content.load();
 
-        Core.app.addListener(logic = new Logic());
-        Core.app.addListener(world = new World());
-        Core.app.addListener(netServer = new NetServer());
-        Core.app.addListener(new ServerControl(args));
+        add(logic = new Logic());
+        add(world = new World());
+        add(netServer = new NetServer());
+        add(new ServerControl(args));
 
         content.initialize(Content::init);
+    }
+
+    @Override
+    public void init(){
+        super.init();
+
+        for(Mod mod : mods.all()){
+            mod.listener.postInit();
+        }
+
+        Events.fire(new GameLoadEvent());
     }
 }

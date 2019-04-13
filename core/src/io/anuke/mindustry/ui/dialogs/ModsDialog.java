@@ -2,7 +2,6 @@ package io.anuke.mindustry.ui.dialogs;
 
 import io.anuke.arc.Core;
 import io.anuke.mindustry.core.Platform;
-import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.mod.Mod;
 
 import java.io.IOException;
@@ -20,24 +19,31 @@ public class ModsDialog extends FloatingDialog{
 
     void setup(){
         cont.clear();
-        cont.defaults().width(300f).pad(4);
+        cont.defaults().width(520f).pad(4);
         if(!mods.all().isEmpty()){
             cont.pane(table -> {
-                table.margin(10f);
+                table.margin(10f).top();
                 for(Mod mod : mods.all()){
-                    table.table("flat", t -> {
-                        t.defaults().pad(2);
+                    table.table("pane", t -> {
+                        t.defaults().pad(2).left().top();
                         t.margin(10f).left();
-                        t.add(mod.meta.name).color(Pal.accent);
-                        t.row();
-                        t.add("v[LIGHT_GRAY]" + mod.meta.version);
+                        t.add("[accent]" + mod.meta.name + "[lightgray] v" + mod.meta.version);
                         t.row();
                         t.label(() -> mod.isEnabled() ? "$mod.enabled" : "$mod.disabled");
                         t.row();
+                        if(mod.meta.author != null){
+                            t.add(Core.bundle.format("mod.author", mod.meta.author));
+                            t.row();
+                        }
+                        if(mod.meta.description != null){
+                            t.labelWrap("[lightgray]" + mod.meta.description).growX();
+                            t.row();
+                        }
                         if(mod.requiresRestart()){
                             t.add("$mod.requiresrestart");
                         }
-                    }).height(160f).width(280f);
+
+                    }).height(200f).width(500f);
                     table.row();
                 }
             });

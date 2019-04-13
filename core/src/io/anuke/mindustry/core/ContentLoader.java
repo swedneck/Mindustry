@@ -12,11 +12,13 @@ import io.anuke.mindustry.entities.effect.*;
 import io.anuke.mindustry.entities.traits.TypeTrait;
 import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.mod.Mod;
 import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.LegacyColorMapper;
 
 import static io.anuke.arc.Core.files;
+import static io.anuke.mindustry.Vars.mods;
 
 /**
  * Loads all game content.
@@ -31,7 +33,7 @@ public class ContentLoader{
     private Array<Content>[] contentMap = new Array[ContentType.values().length];
     private MappableContent[][] temporaryMapper;
     private ObjectSet<Consumer<Content>> initialization = new ObjectSet<>();
-    private ContentList[] content = {
+    Array<ContentList> content = Array.with(
         new Fx(),
         new Items(),
         new StatusEffects(),
@@ -45,8 +47,8 @@ public class ContentLoader{
         new Zones(),
 
         //these are not really content classes, but this makes initialization easier
-        new LegacyColorMapper(),
-    };
+        new LegacyColorMapper()
+    );
 
     public void setVerbose(){
         verbose = true;
@@ -57,6 +59,10 @@ public class ContentLoader{
         if(loaded){
             Log.info("Content already loaded, skipping.");
             return;
+        }
+
+        for(Mod mod : mods.all()){
+            content.add(mod.listener::init);
         }
 
         registerTypes();

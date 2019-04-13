@@ -6,6 +6,7 @@ import io.anuke.arc.util.Time;
 import io.anuke.mindustry.core.*;
 import io.anuke.mindustry.game.EventType.GameLoadEvent;
 import io.anuke.mindustry.io.BundleLoader;
+import io.anuke.mindustry.mod.Mod;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -39,6 +40,10 @@ public class Mindustry extends ApplicationCore{
     @Override
     public void init(){
         super.init();
+        
+        for(Mod mod : mods.all()){
+            mod.listener.postInit();
+        }
 
         Log.info("Time to load [total]: {0}", Time.elapsed());
         Events.fire(new GameLoadEvent());
