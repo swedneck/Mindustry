@@ -17,6 +17,7 @@ import io.anuke.mindustry.entities.traits.SyncTrait;
 import io.anuke.mindustry.entities.type.*;
 import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.gen.Serialization;
+import io.anuke.mindustry.mod.Mods;
 import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.world.blocks.defense.ForceProjector.ShieldEntity;
 
@@ -109,6 +110,8 @@ public class Vars{
     public static FileHandle customMapDirectory;
     /** data subdirectory used for saves */
     public static FileHandle saveDirectory;
+    /** data subdirectory used for mod jars */
+    public static FileHandle modDirectory;
     /** map file extension */
     public static final String mapExtension = "mmap";
     /** save file extension */
@@ -120,6 +123,7 @@ public class Vars{
     public static ContentLoader content;
     public static GameState state;
     public static GlobalData data;
+    public static Mods mods;
 
     public static Control control;
     public static Logic logic;
@@ -189,6 +193,7 @@ public class Vars{
 
         state = new GameState();
         data = new GlobalData();
+        mods = new Mods();
 
         mobile = Core.app.getType() == ApplicationType.Android || Core.app.getType() == ApplicationType.iOS || testMobile;
         ios = Core.app.getType() == ApplicationType.iOS;
@@ -200,5 +205,8 @@ public class Vars{
         screenshotDirectory = dataDirectory.child("screenshots/");
         customMapDirectory = dataDirectory.child("maps/");
         saveDirectory = dataDirectory.child("saves/");
+        modDirectory = dataDirectory.child("mods/");
+
+        mods.load();
     }
 }

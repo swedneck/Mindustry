@@ -130,7 +130,9 @@ public class MenuFragment extends Fragment{
 
             out.row();
 
-            out.add(new MenuButton("icon-exit", "$quit", Core.app::exit)).width(bw).colspan(2);
+            out.add(new MenuButton("icon-exit", "$quit", Core.app::exit));
+
+            out.add(new MenuButton("icon-map", "$mods", ui.mods::show));
         });
     }
 
