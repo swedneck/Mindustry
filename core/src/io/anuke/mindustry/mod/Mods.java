@@ -4,12 +4,13 @@ import io.anuke.arc.collection.Array;
 import io.anuke.arc.files.FileHandle;
 import io.anuke.arc.util.Log;
 import io.anuke.mindustry.Vars;
+import io.anuke.mindustry.core.Platform;
 
 import java.io.IOException;
 
 public class Mods{
     private Array<Mod> allMods = new Array<>();
-    private ModLoader loader = new ModLoader();
+    private ModLoader loader = Platform.instance.getModLoader();
 
     public Array<Mod> all(){
         return allMods;

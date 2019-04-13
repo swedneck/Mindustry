@@ -61,6 +61,7 @@ public class ModsDialog extends FloatingDialog{
                     setup();
                 }catch(IOException e){
                     ui.showError(e.getMessage());
+                    e.printStackTrace();
                 }
             }, true, "jar");
         }).margin(10f);

@@ -7,6 +7,8 @@ import io.anuke.arc.function.Consumer;
 import io.anuke.arc.math.RandomXS128;
 import io.anuke.arc.scene.ui.TextField;
 import io.anuke.arc.util.serialization.Base64Coder;
+import io.anuke.mindustry.mod.DesktopModLoader;
+import io.anuke.mindustry.mod.ModLoader;
 
 import static io.anuke.mindustry.Vars.mobile;
 
@@ -14,6 +16,11 @@ public abstract class Platform{
     /** Each separate game platform should set this instance to their own implementation. */
     public static Platform instance = new Platform(){
     };
+
+    /** Creates a mod loader specific to this platform.*/
+    public ModLoader getModLoader(){
+        return new DesktopModLoader();
+    }
 
     /** Add a text input dialog that should show up after the field is tapped. */
     public void addDialog(TextField field){

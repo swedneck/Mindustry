@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings.Secure;
 import android.telephony.TelephonyManager;
+import dalvik.system.DexClassLoader;
 import io.anuke.arc.Core;
 import io.anuke.arc.backends.android.surfaceview.AndroidApplication;
 import io.anuke.arc.backends.android.surfaceview.AndroidApplicationConfiguration;
@@ -21,6 +22,8 @@ import io.anuke.arc.util.serialization.Base64Coder;
 import io.anuke.mindustry.core.Platform;
 import io.anuke.mindustry.game.Saves.SaveSlot;
 import io.anuke.mindustry.io.SaveIO;
+import io.anuke.mindustry.mod.*;
+import io.anuke.mindustry.mod.Mod.ModMeta;
 import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.ui.dialogs.FileChooser;
 import io.anuke.net.KryoClient;
@@ -28,6 +31,8 @@ import io.anuke.net.KryoServer;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -43,6 +48,31 @@ public class AndroidLauncher extends AndroidApplication{
         config.useImmersiveMode = true;
         config.depth = 0;
         Platform.instance = new Platform(){
+
+            @Override
+            public ModLoader getModLoader(){
+                return new ModLoader(){
+                    @Override
+                    public Mod loadMod(FileHandle file) throws IOException{
+                        try(ZipFile zip = new ZipFile(file.file())){
+                            ZipEntry info = zip.getEntry("mod-info.json");
+                            if(info == null){
+                                throw new IOException("No mod-info.json found in jar. Is this a mod?");
+                            }
+
+                            ModMeta meta = json.fromJson(ModMeta.class, new BufferedInputStream(zip.getInputStream(info), 1024));
+
+                            ClassLoader cl = new DexClassLoader(file.file().getAbsolutePath(), getFilesDir().getAbsolutePath(), null, getClass().getClassLoader());
+                            Class<?> main = cl.loadClass(meta.main);
+                            return new Mod(meta, (ModBase)main.newInstance());
+                        }catch(IOException e){
+                            throw e;
+                        }catch(Exception e){
+                            throw new IOException(e);
+                        }
+                    }
+                };
+            }
 
             @Override
             public void hide(){

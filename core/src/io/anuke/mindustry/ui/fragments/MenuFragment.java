@@ -63,7 +63,8 @@ public class MenuFragment extends Fragment{
         join = new MobileButton("icon-add", isize, "$joingame", ui.join::show),
         editor = new MobileButton("icon-editor", isize, "$editor", () -> ui.loadAnd(ui.editor::show)),
         tools = new MobileButton("icon-tools", isize, "$settings", ui.settings::show),
-        donate = new MobileButton("icon-donate", isize, "$donate", () -> Core.net.openURI(donationURL));
+        donate = new MobileButton("icon-donate", isize, "$donate", () -> Core.net.openURI(donationURL)),
+        mods = new MobileButton("icon-tools", isize, "$mods", ui.mods::show);
 
         if(Core.graphics.getWidth() > Core.graphics.getHeight()){
             container.add(play);
@@ -77,6 +78,7 @@ public class MenuFragment extends Fragment{
 
                 table.add(editor);
                 table.add(tools);
+                table.add(mods);
 
                 if(Platform.instance.canDonate()) table.add(donate);
             }).colspan(4);
@@ -94,6 +96,7 @@ public class MenuFragment extends Fragment{
             container.table(table -> {
                 table.defaults().set(container.defaults());
 
+                table.add(mods);
                 if(Platform.instance.canDonate()) table.add(donate);
             }).colspan(2);
         }
