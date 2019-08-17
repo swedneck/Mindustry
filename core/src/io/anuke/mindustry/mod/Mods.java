@@ -71,6 +71,11 @@ public class Mods{
         packer.getPages().each(page -> page.getRects().each((name, rect) -> Core.atlas.addRegion(name, page.getTexture(), (int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height)));
     }
 
+    public void removeMod(Mod mod){
+        mod.file.delete();
+
+    }
+
     public void importMod(FileHandle file) throws IOException{
         Vars.modDirectory.mkdirs();
         FileHandle dest = Vars.modDirectory.child(file.name());

@@ -22,6 +22,10 @@ public class Mod{
         return requiresRestart;
     }
 
+    public void setRequiresRestart(boolean requiresRestart){
+        this.requiresRestart = requiresRestart;
+    }
+
     public boolean isEnabled(){
         return enabled;
     }

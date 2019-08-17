@@ -6,8 +6,7 @@ import io.anuke.mindustry.mod.Mod;
 
 import java.io.IOException;
 
-import static io.anuke.mindustry.Vars.mods;
-import static io.anuke.mindustry.Vars.ui;
+import static io.anuke.mindustry.Vars.*;
 
 public class ModsDialog extends FloatingDialog{
 
@@ -42,8 +41,22 @@ public class ModsDialog extends FloatingDialog{
                         if(mod.requiresRestart()){
                             t.add("$mod.requiresrestart");
                         }
+                        t.row();
+                        t.table(buttons -> {
+                            buttons.defaults().size(iconsize);
 
-                    }).height(200f).width(500f);
+                            buttons.addImageButton("icon-trash", "clear", iconsize, () -> ui.showConfirm("$confirm", "$mod.remove.confirm", () -> {
+                                mods.removeMod(mod);
+                                mod.setEnabled(false);
+                                mod.setRequiresRestart(true);
+                                setup();
+                            })).disabled(b -> mod.requiresRestart());
+                            //buttons.addImageButton("clear", "icon-trash-small", iconsizesmall, () -> ui.showConfirm("$confirm", "$mod.delete.confirm", () -> {
+
+                            //}));
+                        }).pad(-10f).padTop(4);
+
+                    }).width(500f);
                     table.row();
                 }
             });
