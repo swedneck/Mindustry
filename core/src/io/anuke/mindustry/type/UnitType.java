@@ -1,19 +1,21 @@
 package io.anuke.mindustry.type;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.ObjectSet;
-import io.anuke.arc.function.Supplier;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.mindustry.content.Items;
-import io.anuke.mindustry.entities.traits.TypeTrait;
-import io.anuke.mindustry.entities.type.BaseUnit;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.game.UnlockableContent;
-import io.anuke.mindustry.ui.ContentDisplay;
+import io.anuke.arc.*;
+import io.anuke.arc.audio.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.function.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.ui.*;
 
 public class UnitType extends UnlockableContent{
-    protected final Supplier<? extends BaseUnit> constructor;
+    public final TypeID typeID;
+    public final Supplier<? extends BaseUnit> constructor;
+
     public float health = 60;
     public float hitsize = 7f;
     public float hitsizeTile = 4f;
@@ -28,13 +30,14 @@ public class UnitType extends UnlockableContent{
     public boolean rotateWeapon = false;
     public float drag = 0.1f;
     public float maxVelocity = 5f;
-    public float retreatPercent = 0.2f;
+    public float retreatPercent = 0.6f;
     public int itemCapacity = 30;
     public ObjectSet<Item> toMine = ObjectSet.with(Items.lead, Items.copper);
     public float buildPower = 0.3f, minePower = 0.7f;
     public Weapon weapon;
     public float weaponOffsetY, engineOffset = 6f, engineSize = 2f;
     public ObjectSet<StatusEffect> immunities = new ObjectSet<>();
+    public Sound deathSound = Sounds.bang;
 
     public TextureRegion iconRegion, legRegion, baseRegion, region;
 
@@ -42,8 +45,7 @@ public class UnitType extends UnlockableContent{
         super(name);
         this.constructor = mainConstructor;
         this.description = Core.bundle.getOrNull("unit." + name + ".description");
-
-        TypeTrait.registerType(type, mainConstructor);
+        this.typeID = new TypeID(name, mainConstructor);
     }
 
     @Override
@@ -66,11 +68,8 @@ public class UnitType extends UnlockableContent{
         weapon.load();
         iconRegion = Core.atlas.find("unit-icon-" + name, Core.atlas.find(name));
         region = Core.atlas.find(name);
-
-        if(!isFlying){
-            legRegion = Core.atlas.find(name + "-leg");
-            baseRegion = Core.atlas.find(name + "-base");
-        }
+        legRegion = Core.atlas.find(name + "-leg");
+        baseRegion = Core.atlas.find(name + "-base");
     }
 
     @Override

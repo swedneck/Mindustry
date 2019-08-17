@@ -18,7 +18,7 @@ import java.util.Arrays;
 import static io.anuke.mindustry.Vars.tilesize;
 import static io.anuke.mindustry.Vars.world;
 
-public class FloorRenderer{
+public class FloorRenderer implements Disposable{
     private final static int chunksize = 64;
 
     private Chunk[][] cache;
@@ -62,7 +62,7 @@ public class FloorRenderer{
 
                 //loop through all layers, and add layer index if it exists
                 for(int i = 0; i < layers; i++){
-                    if(chunk.caches[i] != -1){
+                    if(chunk.caches[i] != -1 && i != CacheLayer.walls.ordinal()){
                         drawnLayerSet.add(i);
                     }
                 }
@@ -219,6 +219,14 @@ public class FloorRenderer{
         }
 
         Log.info("Time to cache: {0}", Time.elapsed());
+    }
+
+    @Override
+    public void dispose(){
+        if(cbatch != null){
+            cbatch.dispose();
+            cbatch = null;
+        }
     }
 
     private class Chunk{

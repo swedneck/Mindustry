@@ -246,11 +246,31 @@ public class TechTree implements ContentList{
                         });
                     });
 
-                    node(spiritFactory, () -> {
-                        node(phantomFactory);
+                    node(draugFactory, () -> {
+                        node(spiritFactory, () -> {
+                            node(phantomFactory);
+                        });
+
+                        node(daggerFactory, () -> {
+                            node(crawlerFactory, () -> {
+                                node(titanFactory, () -> {
+                                    node(fortressFactory, () -> {
+
+                                    });
+                                });
+                            });
+
+                            node(wraithFactory, () -> {
+                                node(ghoulFactory, () -> {
+                                    node(revenantFactory, () -> {
+
+                                    });
+                                });
+                            });
+                        });
                     });
 
-                    node(alphaDartPad, () -> {
+                    node(dartPad, () -> {
                         node(deltaPad, () -> {
 
                             node(javelinPad, () -> {
@@ -274,15 +294,14 @@ public class TechTree implements ContentList{
     private TechNode node(Block block, Runnable children){
         ItemStack[] requirements = new ItemStack[block.buildRequirements.length];
         for(int i = 0; i < requirements.length; i++){
-            requirements[i] = new ItemStack(block.buildRequirements[i].item, block.buildRequirements[i].amount * 5);
+            requirements[i] = new ItemStack(block.buildRequirements[i].item, 30 + block.buildRequirements[i].amount * 5);
         }
 
         return new TechNode(block, requirements, children);
     }
 
     private TechNode node(Block block){
-        return node(block, () -> {
-        });
+        return node(block, () -> {});
     }
 
     public static class TechNode{

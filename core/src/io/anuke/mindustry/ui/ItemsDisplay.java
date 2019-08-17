@@ -13,6 +13,7 @@ import java.util.Locale;
 import static io.anuke.mindustry.Vars.content;
 import static io.anuke.mindustry.Vars.data;
 
+/** Displays a list of items, e.g. launched items.*/
 public class ItemsDisplay extends Table{
     private static final NumberFormat format = NumberFormat.getNumberInstance(Locale.getDefault());
 
@@ -25,7 +26,7 @@ public class ItemsDisplay extends Table{
         top().left();
         margin(0);
 
-        table("flat", t -> {
+        table("button", t -> {
             t.margin(10).marginLeft(15).marginTop(15f);
             t.add("$launcheditems").colspan(3).left().padBottom(5);
             t.row();

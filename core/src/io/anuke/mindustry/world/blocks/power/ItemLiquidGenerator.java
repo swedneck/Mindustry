@@ -25,7 +25,6 @@ import static io.anuke.mindustry.Vars.tilesize;
  * Liquids will take priority over items.
  */
 public class ItemLiquidGenerator extends PowerGenerator{
-
     protected float minItemEfficiency = 0.2f;
     /** The time in number of ticks during which a single item will produce power. */
     protected float itemDuration = 70f;
@@ -37,7 +36,7 @@ public class ItemLiquidGenerator extends PowerGenerator{
     protected Effects.Effect generateEffect = Fx.generatespark;
     protected Effects.Effect explodeEffect = Fx.generatespark;
     protected Color heatColor = Color.valueOf("ff9b59");
-    protected TextureRegion topRegion;
+    protected TextureRegion topRegion, liquidRegion;
     protected boolean randomlyExplode = false;
 
     public ItemLiquidGenerator(boolean hasItems, boolean hasLiquids, String name){
@@ -60,6 +59,7 @@ public class ItemLiquidGenerator extends PowerGenerator{
         if(hasItems){
             topRegion = Core.atlas.find(name + "-top");
         }
+        liquidRegion = Core.atlas.find(name + "-liquid");
     }
 
     @Override
@@ -69,6 +69,12 @@ public class ItemLiquidGenerator extends PowerGenerator{
         if(hasItems){
             stats.add(BlockStat.productionTime, itemDuration / 60f, StatUnit.seconds);
         }
+    }
+
+    @Override
+    public boolean shouldConsume(Tile tile){
+        ItemLiquidGeneratorEntity entity = tile.entity();
+        return entity.generateTime > 0;
     }
 
     @Override
@@ -146,13 +152,9 @@ public class ItemLiquidGenerator extends PowerGenerator{
         if(hasLiquids){
             Draw.color(entity.liquids.current().color);
             Draw.alpha(entity.liquids.currentAmount() / liquidCapacity);
-            drawLiquidCenter(tile);
+            Draw.rect(liquidRegion, tile.drawx(), tile.drawy());
             Draw.color();
         }
-    }
-
-    public void drawLiquidCenter(Tile tile){
-        Draw.rect("blank", tile.drawx(), tile.drawy(), 2, 2);
     }
 
     protected float getItemEfficiency(Item item){

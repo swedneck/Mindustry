@@ -30,7 +30,7 @@ public class Item extends UnlockableContent implements Comparable<Item>{
      * base material cost of this item, used for calculating place times
      * 1 cost = 1 tick added to build time
      */
-    public float cost = 3f;
+    public float cost = 1f;
     /** If true, item is always unlocked. */
     public boolean alwaysUnlocked = false;
 
@@ -69,7 +69,7 @@ public class Item extends UnlockableContent implements Comparable<Item>{
 
     @Override
     public TextureRegion getContentIcon(){
-        return icon(Icon.xlarge);
+        return icon(Icon.large);
     }
 
     @Override
@@ -91,7 +91,8 @@ public class Item extends UnlockableContent implements Comparable<Item>{
         small(8 * 2),
         medium(8 * 3),
         large(8 * 4),
-        xlarge(8 * 5);
+        xlarge(8 * 5),
+        xxlarge(8 * 6);
 
         public final int size;
 

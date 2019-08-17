@@ -11,6 +11,8 @@ public class Pal{
     bulletYellow = Color.valueOf("ffeec9"),
     bulletYellowBack = Color.valueOf("f9c87a"),
 
+    darkMetal = Color.valueOf("6e7080"),
+
     missileYellow = Color.valueOf("ffd2ae"),
     missileYellowBack = Color.valueOf("e58956"),
 
@@ -21,6 +23,8 @@ public class Pal{
 
     lightFlame = Color.valueOf("ffdd55"),
     darkFlame = Color.valueOf("db401c"),
+
+    power2 = Color.valueOf("ff9f6c"),
 
     lightPyraFlame = Color.valueOf("ffb855"),
     darkPyraFlame = Color.valueOf("db661c"),
@@ -35,6 +39,7 @@ public class Pal{
     darkishGray = new Color(0.3f, 0.3f, 0.3f, 1f),
     darkerGray = new Color(0.2f, 0.2f, 0.2f, 1f),
     ammo = Color.valueOf("ff8947"),
+    rubble = Color.valueOf("1c1817"),
 
     boostTo = Color.valueOf("ffad4d"),
     boostFrom = Color.valueOf("ff7f57"),
@@ -49,10 +54,11 @@ public class Pal{
     bar = Color.SLATE,
     accent = Color.valueOf("ffd37f"),
     stat = Color.valueOf("ffd37f"),
-    locked = Color.valueOf("989aa4"),
+    gray = Color.valueOf("454545"),
     accentBack = Color.valueOf("d4816b"),
     place = Color.valueOf("6335f8"),
     remove = Color.valueOf("e55454"),
+    noplace = Color.valueOf("ffa697"),
     removeBack = Color.valueOf("a73e3e"),
     placeRotate = accent,
     breakInvalid = Color.valueOf("d44b3d"),

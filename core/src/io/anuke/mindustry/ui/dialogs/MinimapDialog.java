@@ -6,10 +6,9 @@ import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.input.KeyCode;
 import io.anuke.arc.scene.event.InputEvent;
 import io.anuke.arc.scene.event.InputListener;
-import io.anuke.arc.scene.ui.layout.Unit;
+import io.anuke.arc.scene.ui.layout.UnitScl;
 
-import static io.anuke.mindustry.Vars.mobile;
-import static io.anuke.mindustry.Vars.renderer;
+import static io.anuke.mindustry.Vars.*;
 
 public class MinimapDialog extends FloatingDialog{
 
@@ -25,12 +24,13 @@ public class MinimapDialog extends FloatingDialog{
 
     void setup(){
         cont.clear();
-        float size = Math.min(Core.graphics.getWidth(), Core.graphics.getHeight()) / Unit.dp.scl(1f) / 1.3f;
+        float size = Math.min(Core.graphics.getWidth(), Core.graphics.getHeight()) / UnitScl.dp.scl(1f) / 1.3f;
 
         cont.table("pane", t -> {
             t.addRect((x, y, width, height) -> {
                 if(renderer.minimap.getRegion() == null) return;
                 Draw.color(Color.WHITE);
+                Draw.alpha(parentAlpha);
                 Draw.rect(renderer.minimap.getRegion(), x + width / 2f, y + height / 2f, width, height);
 
                 if(renderer.minimap.getTexture() != null){
@@ -54,7 +54,8 @@ public class MinimapDialog extends FloatingDialog{
             @Override
             public void touchDragged(InputEvent event, float x, float y, int pointer){
                 if(mobile){
-                    renderer.minimap.zoomBy(Core.input.deltaY(pointer) / 30f / Unit.dp.scl(1f));
+                    float max = Math.min(world.width(), world.height()) / 16f / 2f;
+                    renderer.minimap.setZoom(1f + y / cont.getHeight() * (max - 1f));
                 }
             }
         });

@@ -11,10 +11,9 @@ import io.anuke.arc.scene.event.Touchable;
 import io.anuke.arc.scene.style.TextureRegionDrawable;
 import io.anuke.arc.scene.ui.*;
 import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.mindustry.core.GameState.State;
+import io.anuke.mindustry.content.Blocks;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.game.EventType.UnlockEvent;
-import io.anuke.mindustry.game.EventType.WorldLoadEvent;
+import io.anuke.mindustry.game.EventType.*;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.input.Binding;
 import io.anuke.mindustry.input.InputHandler;
@@ -38,23 +37,25 @@ public class PlacementFragment extends Fragment{
     Table blockTable, toggler, topTable;
     boolean lastGround;
 
-    //TODO make this configurable
+    //not configurable, no plans to make it configurable
     final KeyCode[] inputGrid = {
-    KeyCode.NUM_1, KeyCode.NUM_2, KeyCode.NUM_3, KeyCode.NUM_4,
-    KeyCode.Q, KeyCode.W, KeyCode.E, KeyCode.R,
-    KeyCode.A, KeyCode.S, KeyCode.D, KeyCode.F,
-    KeyCode.Z, KeyCode.X, KeyCode.C, KeyCode.V
+        KeyCode.NUM_1, KeyCode.NUM_2, KeyCode.NUM_3, KeyCode.NUM_4,
+        KeyCode.Q, KeyCode.W, KeyCode.E, KeyCode.R,
+        KeyCode.A, KeyCode.S, KeyCode.D, KeyCode.F,
+        KeyCode.Z, KeyCode.X, KeyCode.C, KeyCode.V
     }, inputCatGrid = {
-    KeyCode.NUM_1, KeyCode.NUM_2,
-    KeyCode.Q, KeyCode.W,
-    KeyCode.A, KeyCode.S,
-    KeyCode.Z, KeyCode.X, KeyCode.C, KeyCode.V
+        KeyCode.NUM_1, KeyCode.NUM_2,
+        KeyCode.Q, KeyCode.W,
+        KeyCode.A, KeyCode.S,
+        KeyCode.Z, KeyCode.X, KeyCode.C, KeyCode.V
     };
 
     public PlacementFragment(){
         Events.on(WorldLoadEvent.class, event -> {
-            control.input().block = null;
-            rebuild();
+            Core.app.post(() -> {
+                control.input.block = null;
+                rebuild();
+            });
         });
 
         Events.on(UnlockEvent.class, event -> {
@@ -78,7 +79,7 @@ public class PlacementFragment extends Fragment{
             Tile tile = world.tileWorld(Core.input.mouseWorld().x, Core.input.mouseWorld().y);
 
             if(tile != null){
-                tile = tile.target();
+                tile = tile.link();
                 Block tryRecipe = tile.block();
                 if(tryRecipe.isVisible() && unlocked(tryRecipe)){
                     input.block = tryRecipe;
@@ -115,10 +116,10 @@ public class PlacementFragment extends Fragment{
     public void build(Group parent){
         parent.fill(full -> {
             toggler = full;
-            full.bottom().right().visible(() -> !state.is(State.menu) && ui.hudfrag.shown());
+            full.bottom().right().visible(() -> ui.hudfrag.shown());
 
             full.table(frame -> {
-                InputHandler input = control.input();
+                InputHandler input = control.input;
 
                 //rebuilds the category table with the correct recipes
                 Runnable rebuildCategory = () -> {
@@ -144,13 +145,14 @@ public class PlacementFragment extends Fragment{
                             if(unlocked(block)){
                                 input.block = input.block == block ? null : block;
                             }
-                        }).size(46f).group(group).get();
+                        }).size(46f).group(group).name("block-" + block.name).get();
 
                         button.getStyle().imageUp = new TextureRegionDrawable(block.icon(Icon.medium));
 
                         button.update(() -> { //color unplacable things gray
                             TileEntity core = player.getClosestCore();
-                            Color color = core != null && (core.items.has(block.buildRequirements, state.rules.buildCostMultiplier) || state.rules.infiniteResources) ? Color.WHITE : Color.GRAY;
+                            Color color = block.buildVisibility == Blocks.padVisible && !block.buildVisibility.get() ? Pal.noplace :
+                                        state.rules.infiniteResources || (core != null && (core.items.has(block.buildRequirements, state.rules.buildCostMultiplier) || state.rules.infiniteResources)) ? Color.WHITE : Color.GRAY;
                             button.forEach(elem -> elem.setColor(color));
                             button.setChecked(input.block == block);
                         });
@@ -161,6 +163,12 @@ public class PlacementFragment extends Fragment{
                                 hovered = null;
                             }
                         });
+                    }
+                    //add missing elements to even out table size
+                    if(index < 4){
+                        for(int i = 0; i < 4-index; i++){
+                            blockTable.add().size(46f);
+                        }
                     }
                     blockTable.act(0f);
                 };
@@ -191,8 +199,14 @@ public class PlacementFragment extends Fragment{
                                 .left().width(190f).padLeft(5);
                                 header.add().growX();
                                 if(unlocked(lastDisplay)){
-                                    header.addButton("?", "clear-partial", () -> ui.content.show(lastDisplay))
-                                    .size(8 * 5).padTop(-5).padRight(-5).right().grow();
+                                    header.addButton("?", "clear-partial", () -> {
+                                        ui.content.show(lastDisplay);
+                                        Events.fire(new BlockInfoEvent());
+                                    }).size(8 * 5).padTop(-5).padRight(-5).right().grow().name("blockinfo");
+                                }
+                                if(lastDisplay.buildVisibility == Blocks.padVisible && !lastDisplay.buildVisibility.get()){
+                                    header.row();
+                                    header.add("$attackpvponly").width(230f).wrap().colspan(3).left();
                                 }
                             }).growX().left();
                             topTable.row();
@@ -238,7 +252,7 @@ public class PlacementFragment extends Fragment{
                     });
                 }).colspan(3).fillX().visible(() -> getSelected() != null || tileDisplayBlock() != null).touchable(Touchable.enabled);
                 frame.row();
-                frame.addImage("blank").color(Pal.accent).colspan(3).height(3).growX();
+                frame.addImage("whiteui").color(Pal.gray).colspan(3).height(4).growX();
                 frame.row();
                 frame.table("pane-2", blocksSelect -> {
                     blocksSelect.margin(4).marginTop(0);
@@ -262,14 +276,14 @@ public class PlacementFragment extends Fragment{
                         if(f++ % 2 == 0) categories.row();
 
                         if(categoryEmpty[cat.ordinal()]){
-                            categories.addImage("flat");
+                            categories.addImage("flat-trans");
                             continue;
                         }
 
-                        categories.addImageButton("icon-" + cat.name(), "clear-toggle", 16 * 2, () -> {
+                        categories.addImageButton("icon-" + cat.name() + "-med", "clear-toggle-trans", iconsizemed, () -> {
                             currentCategory = cat;
                             rebuildCategory.run();
-                        }).group(group).update(i -> i.setChecked(currentCategory == cat));
+                        }).group(group).update(i -> i.setChecked(currentCategory == cat)).name("category-" + cat.name());
                     }
                 }).touchable(Touchable.enabled);
 
@@ -291,7 +305,7 @@ public class PlacementFragment extends Fragment{
     Array<Block> getByCategory(Category cat){
         returnArray.clear();
         for(Block block : content.blocks()){
-            if(block.buildCategory == cat && block.isVisible()){
+            if(block.buildCategory == cat && (block.isVisible() || block.buildVisibility == Blocks.padVisible)){
                 returnArray.add(block);
             }
         }
@@ -313,7 +327,7 @@ public class PlacementFragment extends Fragment{
         if(!Core.scene.hasMouse() && topTable.hit(v.x, v.y, false) == null){
             Tile tile = world.tileWorld(Core.input.mouseWorld().x, Core.input.mouseWorld().y);
             if(tile != null){
-                hoverTile = tile.target();
+                hoverTile = tile.link();
             }else{
                 hoverTile = null;
             }
@@ -322,8 +336,8 @@ public class PlacementFragment extends Fragment{
         }
 
         //block currently selected
-        if(control.input().block != null){
-            toDisplay = control.input().block;
+        if(control.input.block != null){
+            toDisplay = control.input.block;
         }
 
         //block hovered on in build menu
@@ -336,6 +350,6 @@ public class PlacementFragment extends Fragment{
 
     /** Returns the block currently being hovered over in the world. */
     Block tileDisplayBlock(){
-        return hoverTile == null ? null : hoverTile.block().synthetic() ? hoverTile.block() : hoverTile.overlay().itemDrop != null ? hoverTile.overlay() : null;
+        return hoverTile == null ? null : hoverTile.block().synthetic() ? hoverTile.block() : hoverTile.drop() != null ? hoverTile.overlay().itemDrop != null ? hoverTile.overlay() : hoverTile.floor() : null;
     }
 }

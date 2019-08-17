@@ -105,7 +105,7 @@ public abstract class BlockStorage extends UnlockableContent{
 
     public void tryDumpLiquid(Tile tile, Liquid liquid){
         Array<Tile> proximity = tile.entity.proximity();
-        int dump = tile.getDump();
+        int dump = tile.rotation();
 
         for(int i = 0; i < proximity.size; i++){
             incrementDump(tile, proximity.size);
@@ -138,7 +138,7 @@ public abstract class BlockStorage extends UnlockableContent{
     public float tryMoveLiquid(Tile tile, Tile next, boolean leak, Liquid liquid){
         if(next == null) return 0;
 
-        next = next.target();
+        next = next.link();
 
         if(next.getTeam() == tile.getTeam() && next.block().hasLiquids && tile.entity.liquids.get(liquid) > 0f){
 
@@ -154,15 +154,13 @@ public abstract class BlockStorage extends UnlockableContent{
                     return flow;
                 }else if(ofract > 0.1f && fract > 0.1f){
                     Liquid other = next.entity.liquids.current();
-                    if((other.flammability > 0.3f && liquid.temperature > 0.7f) ||
-                    (liquid.flammability > 0.3f && other.temperature > 0.7f)){
+                    if((other.flammability > 0.3f && liquid.temperature > 0.7f) || (liquid.flammability > 0.3f && other.temperature > 0.7f)){
                         tile.entity.damage(1 * Time.delta());
                         next.entity.damage(1 * Time.delta());
                         if(Mathf.chance(0.1 * Time.delta())){
                             Effects.effect(Fx.fire, (tile.worldx() + next.worldx()) / 2f, (tile.worldy() + next.worldy()) / 2f);
                         }
-                    }else if((liquid.temperature > 0.7f && other.temperature < 0.55f) ||
-                    (other.temperature > 0.7f && liquid.temperature < 0.55f)){
+                    }else if((liquid.temperature > 0.7f && other.temperature < 0.55f) || (other.temperature > 0.7f && liquid.temperature < 0.55f)){
                         tile.entity.liquids.remove(liquid, Math.min(tile.entity.liquids.get(liquid), 0.7f * Time.delta()));
                         if(Mathf.chance(0.2f * Time.delta())){
                             Effects.effect(Fx.steam, (tile.worldx() + next.worldx()) / 2f, (tile.worldy() + next.worldy()) / 2f);
@@ -184,7 +182,7 @@ public abstract class BlockStorage extends UnlockableContent{
      */
     public void offloadNear(Tile tile, Item item){
         Array<Tile> proximity = tile.entity.proximity();
-        int dump = tile.getDump();
+        int dump = tile.rotation();
 
         for(int i = 0; i < proximity.size; i++){
             incrementDump(tile, proximity.size);
@@ -214,7 +212,7 @@ public abstract class BlockStorage extends UnlockableContent{
             return false;
 
         Array<Tile> proximity = entity.proximity();
-        int dump = tile.getDump();
+        int dump = tile.rotation();
 
         if(proximity.size == 0) return false;
 
@@ -251,7 +249,7 @@ public abstract class BlockStorage extends UnlockableContent{
     }
 
     protected void incrementDump(Tile tile, int prox){
-        tile.setDump((byte)((tile.getDump() + 1) % prox));
+        tile.rotation((byte)((tile.rotation() + 1) % prox));
     }
 
     /** Used for dumping items. */
@@ -261,8 +259,9 @@ public abstract class BlockStorage extends UnlockableContent{
 
     /** Try offloading an item to a nearby container in its facing direction. Returns true if success. */
     public boolean offloadDir(Tile tile, Item item){
-        Tile other = tile.getNearby(tile.getRotation());
-        if(other != null && other.target().getTeamID() == tile.getTeamID() && other.block().acceptItem(item, other, tile)){
+        Tile other = tile.getNearby(tile.rotation());
+        if(other != null) other = other.link();
+        if(other != null && other.getTeam() == tile.getTeam() && other.block().acceptItem(item, other, tile)){
             other.block().handleItem(item, other, tile);
             return true;
         }

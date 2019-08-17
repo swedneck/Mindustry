@@ -8,6 +8,7 @@ import java.util.Locale;
 public enum BlockStat{
     health(StatCategory.general),
     size(StatCategory.general),
+    buildTime(StatCategory.general),
 
     itemCapacity(StatCategory.items),
     itemsMoved(StatCategory.items),
@@ -38,6 +39,7 @@ public enum BlockStat{
     powerShot(StatCategory.shooting),
     targetsAir(StatCategory.shooting),
     targetsGround(StatCategory.shooting),
+    damage(StatCategory.shooting),
     ammo(StatCategory.shooting),
 
     booster(StatCategory.optional),

@@ -40,6 +40,10 @@ public class Pathfinder{
         });
     }
 
+    public void updateSolid(Tile tile){
+        update(tile, tile.getTeam());
+    }
+
     public void update(){
         if(Net.client() || paths == null) return;
 
@@ -66,7 +70,7 @@ public class Pathfinder{
             if(other == null) continue;
 
             if(values[dx][dy] < value && (target == null || values[dx][dy] < tl) &&
-            !other.solid() &&
+            !other.solid() && other.floor().drownTime <= 0 &&
             !(point.x != 0 && point.y != 0 && (world.solid(tile.x + point.x, tile.y) || world.solid(tile.x, tile.y + point.y)))){ //diagonal corner trap
                 target = other;
                 tl = values[dx][dy];
@@ -83,7 +87,7 @@ public class Pathfinder{
     }
 
     private boolean passable(Tile tile, Team team){
-        return (!tile.solid()) || (tile.breakable() && (tile.target().getTeam() != team));
+        return (!tile.solid()) || (tile.breakable() && (tile.getTeam() != team));
     }
 
     /**
@@ -92,8 +96,15 @@ public class Pathfinder{
      */
     private void update(Tile tile, Team team){
         //make sure team exists
-        if(paths != null && paths[team.ordinal()] != null && paths[team.ordinal()].weights != null){
+        if(paths != null && paths[team.ordinal()] != null && paths[team.ordinal()].weights != null && Structs.inBounds(tile.x, tile.y, paths[team.ordinal()].weights)){
             PathData path = paths[team.ordinal()];
+
+            if(path.weights[tile.x][tile.y] <= 0.1f){
+                //this was a previous target
+                path.frontier.clear();
+            }else if(!path.frontier.isEmpty()){
+                return;
+            }
 
             //impassable tiles have a weight of float.max
             if(!passable(tile, team)){

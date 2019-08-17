@@ -30,7 +30,7 @@ public class HostDialog extends FloatingDialog{
                 ui.listfrag.rebuild();
             }).grow().pad(8).get().setMaxLength(40);
 
-            ImageButton button = t.addImageButton("white", "clear-full", 40, () -> {
+            ImageButton button = t.addImageButton("whiteui", "clear-full", 40, () -> {
                 new ColorPickDialog().show(color -> {
                     player.color.set(color);
                     Core.settings.put("color-0", Color.rgba8888(color));
@@ -56,7 +56,7 @@ public class HostDialog extends FloatingDialog{
                     Net.host(Vars.port);
                     player.isAdmin = true;
                 }catch(IOException e){
-                    ui.showError(Core.bundle.format("server.error", Strings.parseException(e, false)));
+                    ui.showError(Core.bundle.format("server.error", Strings.parseException(e, true)));
                 }
                 ui.loadfrag.hide();
                 hide();
@@ -64,5 +64,9 @@ public class HostDialog extends FloatingDialog{
         }).width(w).height(70f);
 
         cont.addButton("?", () -> ui.showInfo("$host.info")).size(65f, 70f).padLeft(6f);
+
+        shown(() -> {
+            Core.app.post(() -> Core.settings.getBoolOnce("hostinfo", () -> ui.showInfo("$host.info")));
+        });
     }
 }

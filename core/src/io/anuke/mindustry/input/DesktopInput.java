@@ -1,22 +1,22 @@
 package io.anuke.mindustry.input;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Graphics.Cursor;
-import io.anuke.arc.Graphics.Cursor.SystemCursor;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Lines;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.math.geom.Point2;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.input.PlaceUtils.NormalizeDrawResult;
-import io.anuke.mindustry.input.PlaceUtils.NormalizeResult;
+import io.anuke.arc.*;
+import io.anuke.arc.Graphics.*;
+import io.anuke.arc.Graphics.Cursor.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.input.PlaceUtils.*;
 import io.anuke.mindustry.net.Net;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.*;
 
+import static io.anuke.arc.Core.scene;
 import static io.anuke.mindustry.Vars.*;
 import static io.anuke.mindustry.input.PlaceMode.*;
 
@@ -39,6 +39,7 @@ public class DesktopInput extends InputHandler{
             block.getPlaceDraw(placeDraw, rotation, prevX, prevY, prevRotation);
 
             Draw.color();
+            Draw.mixcol(Pal.accent, 0.12f + Mathf.absin(Time.time(), 8f, 0.35f));
             Draw.rect(placeDraw.region, x * tilesize + block.offset(), y * tilesize + block.offset(),
             placeDraw.region.getWidth() * selectScale * Draw.scl * placeDraw.scalex,
             placeDraw.region.getHeight() * selectScale * Draw.scl * placeDraw.scaley,
@@ -52,6 +53,7 @@ public class DesktopInput extends InputHandler{
                     Draw.rect("block-select", x * tilesize + block.offset() + offset * p.x, y * tilesize + block.offset() + offset * p.y, i * 90);
             }
             Draw.color();
+            Draw.mixcol();
         }else{
             Draw.color(Pal.removeBack);
             Lines.square(x * tilesize + block.offset(), y * tilesize + block.offset() - 1, block.size * tilesize / 2f - 1);
@@ -94,9 +96,8 @@ public class DesktopInput extends InputHandler{
 
             for(int x = dresult.x; x <= dresult.x2; x++){
                 for(int y = dresult.y; y <= dresult.y2; y++){
-                    Tile tile = world.tile(x, y);
+                    Tile tile = world.ltile(x, y);
                     if(tile == null || !validBreak(tile.x, tile.y)) continue;
-                    tile = tile.target();
 
                     Draw.color(Pal.removeBack);
                     Lines.square(tile.drawx(), tile.drawy() - 1, tile.block().size * tilesize / 2f - 1);
@@ -130,14 +131,20 @@ public class DesktopInput extends InputHandler{
             player.isShooting = false;
         }
 
+        if(!state.is(State.menu) && Core.input.keyTap(Binding.minimap) && !ui.chatfrag.chatOpen() && !(scene.getKeyboardFocus() instanceof TextField)){
+            if(!ui.minimap.isShown()){
+                ui.minimap.show();
+            }else{
+                ui.minimap.hide();
+            }
+        }
+
         if(state.is(State.menu) || Core.scene.hasDialog()) return;
 
-        //zoom and rotate things
+        //zoom things
         if(Math.abs(Core.input.axisTap(Binding.zoom)) > 0 && (Core.input.keyDown(Binding.zoom_hold))){
             renderer.scaleCamera(Core.input.axisTap(Binding.zoom));
         }
-
-        //renderer.minimap.zoomBy(-Core.input.axisTap(Binding.zoom_minimap));
 
         if(player.isDead()){
             cursorType = SystemCursor.arrow;
@@ -167,7 +174,7 @@ public class DesktopInput extends InputHandler{
         Tile cursor = tileAt(Core.input.mouseX(), Core.input.mouseY());
 
         if(cursor != null){
-            cursor = cursor.target();
+            cursor = cursor.link();
 
             cursorType = cursor.block().getCursor(cursor);
 
@@ -207,7 +214,7 @@ public class DesktopInput extends InputHandler{
                 mode = placing;
             }else if(selected != null){
                 //only begin shooting if there's no cursor event
-                if(!tileTapped(selected) && !tryTapPlayer(Core.input.mouseWorld().x, Core.input.mouseWorld().y) && player.getPlaceQueue().size == 0 && !droppingItem &&
+                if(!tileTapped(selected) && !tryTapPlayer(Core.input.mouseWorld().x, Core.input.mouseWorld().y) && player.buildQueue().size == 0 && !droppingItem &&
                 !tryBeginMine(selected) && player.getMineTile() == null && !ui.chatfrag.chatOpen()){
                     player.isShooting = true;
                 }
@@ -215,7 +222,7 @@ public class DesktopInput extends InputHandler{
                 player.isShooting = true;
             }
         }else if(Core.input.keyTap(Binding.deselect) && (block != null || mode != none || player.isBuilding()) &&
-        !(player.getCurrentRequest() != null && player.getCurrentRequest().breaking && Core.keybinds.get(Binding.deselect) == Core.keybinds.get(Binding.break_block))){
+        !(player.buildRequest() != null && player.buildRequest().breaking && Core.keybinds.get(Binding.deselect) == Core.keybinds.get(Binding.break_block))){
             if(block == null){
                 player.clearBuilding();
             }
@@ -236,6 +243,7 @@ public class DesktopInput extends InputHandler{
                     rotation = l.rotation;
                     tryPlaceBlock(l.x, l.y);
                 });
+                Events.fire(new LineConfirmEvent());
             }else if(mode == breaking){ //touch up while breaking, break everything in selection
                 NormalizeResult result = PlaceUtils.normalizeArea(selectX, selectY, cursorX, cursorY, rotation, false, maxLength);
                 for(int x = 0; x <= Math.abs(result.x2 - result.x); x++){
@@ -249,7 +257,7 @@ public class DesktopInput extends InputHandler{
             }
 
             if(selected != null){
-                tryDropItems(selected.target(), Core.input.mouseWorld().x, Core.input.mouseWorld().y);
+                tryDropItems(selected.link(), Core.input.mouseWorld().x, Core.input.mouseWorld().y);
             }
 
             mode = none;

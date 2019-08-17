@@ -6,11 +6,7 @@ import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.Pixmap;
 import io.anuke.arc.util.Log;
 import io.anuke.mindustry.content.*;
-import io.anuke.mindustry.entities.bullet.Bullet;
 import io.anuke.mindustry.entities.bullet.BulletType;
-import io.anuke.mindustry.entities.effect.*;
-import io.anuke.mindustry.entities.traits.TypeTrait;
-import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.mod.Mod;
 import io.anuke.mindustry.type.*;
@@ -45,6 +41,7 @@ public class ContentLoader{
         new Loadouts(),
         new TechTree(),
         new Zones(),
+        new TypeIDs(),
 
         //these are not really content classes, but this makes initialization easier
         new LegacyColorMapper()
@@ -64,8 +61,6 @@ public class ContentLoader{
         for(Mod mod : mods.all()){
             content.add(mod.listener::init);
         }
-
-        registerTypes();
 
         for(ContentType type : ContentType.values()){
             contentMap[type.ordinal()] = new Array<>();
@@ -96,15 +91,10 @@ public class ContentLoader{
         for(Array<Content> arr : contentMap){
             for(int i = 0; i < arr.size; i++){
                 int id = arr.get(i).id;
-                if(id < 0) id += 256;
                 if(id != i){
                     throw new IllegalArgumentException("Out-of-order IDs for content '" + arr.get(i) + "' (expected " + i + " but got " + id + ")");
                 }
             }
-        }
-
-        if(blocks().size >= 256){
-            throw new ImpendingDoomException("THE TIME HAS COME. More than 256 blocks have been created.");
         }
 
         if(verbose){
@@ -119,9 +109,13 @@ public class ContentLoader{
         loaded = true;
     }
 
-    /** Initializes all content with the specified function. */
     public void initialize(Consumer<Content> callable){
-        if(initialization.contains(callable)) return;
+        initialize(callable, false);
+    }
+
+    /** Initializes all content with the specified function. */
+    public void initialize(Consumer<Content> callable, boolean override){
+        if(initialization.contains(callable) && !override) return;
 
         for(ContentType type : ContentType.values()){
             for(Content content : contentMap[type.ordinal()]){
@@ -135,7 +129,7 @@ public class ContentLoader{
     /** Loads block colors. */
     public void loadColors(){
         Pixmap pixmap = new Pixmap(files.internal("sprites/block_colors.png"));
-        for(int i = 0; i < 256; i++){
+        for(int i = 0; i < pixmap.getWidth(); i++){
             if(blocks().size > i){
                 int color = pixmap.getPixel(i, 0);
 
@@ -176,10 +170,12 @@ public class ContentLoader{
     }
 
     public <T extends Content> T getByID(ContentType type, int id){
-        //offset negative values by 256, as they are probably a product of byte overflow
-        if(id < 0) id += 256;
 
         if(temporaryMapper != null && temporaryMapper[type.ordinal()] != null && temporaryMapper[type.ordinal()].length != 0){
+            //-1 = invalid content
+            if(id < 0){
+                return null;
+            }
             if(temporaryMapper[type.ordinal()].length <= id || temporaryMapper[type.ordinal()][id] == null){
                 return getByID(type, 0); //default value is always ID 0
             }
@@ -236,23 +232,5 @@ public class ContentLoader{
 
     public Array<UnitType> units(){
         return getBy(ContentType.unit);
-    }
-
-    /**
-     * Registers sync IDs for all types of sync entities.
-     * Do not register units here!
-     */
-    private void registerTypes(){
-        TypeTrait.registerType(Player.class, Player::new);
-        TypeTrait.registerType(Fire.class, Fire::new);
-        TypeTrait.registerType(Puddle.class, Puddle::new);
-        TypeTrait.registerType(Bullet.class, Bullet::new);
-        TypeTrait.registerType(Lightning.class, Lightning::new);
-    }
-
-    private class ImpendingDoomException extends RuntimeException{
-        ImpendingDoomException(String s){
-            super(s);
-        }
     }
 }

@@ -1,7 +1,6 @@
 package io.anuke.mindustry.editor;
 
 import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.input.GestureDetector;
@@ -12,8 +11,8 @@ import io.anuke.arc.math.geom.*;
 import io.anuke.arc.scene.Element;
 import io.anuke.arc.scene.event.*;
 import io.anuke.arc.scene.ui.TextField;
-import io.anuke.arc.scene.ui.layout.Unit;
-import io.anuke.arc.util.Tmp;
+import io.anuke.arc.scene.ui.layout.UnitScl;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.input.Binding;
 import io.anuke.mindustry.ui.GridImage;
@@ -24,11 +23,6 @@ import static io.anuke.mindustry.Vars.ui;
 public class MapView extends Element implements GestureListener{
     private MapEditor editor;
     private EditorTool tool = EditorTool.pencil;
-    //private OperationStack stack = new OperationStack();
-    //private DrawOperation op;
-    //private GridBits used;
-    private Bresenham2 br = new Bresenham2();
-    private boolean updated = false;
     private float offsetx, offsety;
     private float zoom = 1f;
     private boolean grid = false;
@@ -84,8 +78,6 @@ public class MapView extends Element implements GestureListener{
                 mousex = x;
                 mousey = y;
 
-                updated = false;
-
                 Point2 p = project(x, y);
                 lastx = p.x;
                 lasty = p.y;
@@ -95,7 +87,6 @@ public class MapView extends Element implements GestureListener{
                 firstTouch.set(p);
 
                 if(tool.edit){
-                    updated = true;
                     ui.editor.resetSaved();
                 }
 
@@ -114,20 +105,8 @@ public class MapView extends Element implements GestureListener{
                 Point2 p = project(x, y);
 
                 if(tool == EditorTool.line){
-                    if(Core.input.keyDown(KeyCode.TAB)){
-                        if(Math.abs(p.x - firstTouch.x) > Math.abs(p.y - firstTouch.y)){
-                            p.y = firstTouch.y;
-                        }else{
-                            p.x = firstTouch.x;
-                        }
-                    }
-
                     ui.editor.resetSaved();
-                    Array<Point2> points = br.line(startx, starty, p.x, p.y);
-                    for(Point2 point : points){
-                        editor.draw(point.x, point.y, EditorTool.isPaint());
-                    }
-                    updated = true;
+                    tool.touchedLine(editor, startx, starty, p.x, p.y);
                 }
 
                 editor.flushOp();
@@ -141,7 +120,6 @@ public class MapView extends Element implements GestureListener{
 
             @Override
             public void touchDragged(InputEvent event, float x, float y, int pointer){
-
                 mousex = x;
                 mousey = y;
 
@@ -149,14 +127,10 @@ public class MapView extends Element implements GestureListener{
 
                 if(drawing && tool.draggable && !(p.x == lastx && p.y == lasty)){
                     ui.editor.resetSaved();
-                    Array<Point2> points = br.line(lastx, lasty, p.x, p.y);
-                    for(Point2 point : points){
-                        tool.touched(editor, point.x, point.y);
-                    }
-                    updated = true;
+                    Bresenham2.line(lastx, lasty, p.x, p.y, (cx, cy) -> tool.touched(editor, cx, cy));
                 }
 
-                if(tool == EditorTool.line && Core.input.keyDown(KeyCode.TAB)){
+                if(tool == EditorTool.line && tool.mode == 1){
                     if(Math.abs(p.x - firstTouch.x) > Math.abs(p.y - firstTouch.y)){
                         lastx = p.x;
                         lasty = firstTouch.y;
@@ -192,8 +166,7 @@ public class MapView extends Element implements GestureListener{
     public void act(float delta){
         super.act(delta);
 
-        if(Core.scene.getKeyboardFocus() == null || !(Core.scene.getKeyboardFocus() instanceof TextField) &&
-        !Core.input.keyDown(KeyCode.CONTROL_LEFT)){
+        if(Core.scene.getKeyboardFocus() == null || !(Core.scene.getKeyboardFocus() instanceof TextField) && !Core.input.keyDown(KeyCode.CONTROL_LEFT)){
             float ax = Core.input.axis(Binding.move_x);
             float ay = Core.input.axis(Binding.move_y);
             offsetx -= ax * 15f / zoom;
@@ -264,14 +237,8 @@ public class MapView extends Element implements GestureListener{
         Draw.color(Pal.remove);
         Lines.stroke(2f);
         Lines.rect(centerx - sclwidth / 2 - 1, centery - sclheight / 2 - 1, sclwidth + 2, sclheight + 2);
-        if(Core.scene.getKeyboardFocus() != null && isDescendantOf(Core.scene.getKeyboardFocus())){
-            editor.renderer().draw(centerx - sclwidth / 2, centery - sclheight / 2, sclwidth, sclheight);
-        }
+        editor.renderer().draw(centerx - sclwidth / 2, centery - sclheight / 2, sclwidth, sclheight);
         Draw.reset();
-
-        if(!ScissorStack.pushScissors(rect.set(x, y, width, height))){
-            return;
-        }
 
         if(grid){
             Draw.color(Color.GRAY);
@@ -291,7 +258,7 @@ public class MapView extends Element implements GestureListener{
         float scaling = zoom * Math.min(width, height) / editor.width();
 
         Draw.color(Pal.accent);
-        Lines.stroke(Unit.dp.scl(2f));
+        Lines.stroke(UnitScl.dp.scl(2f));
 
         if((!editor.drawBlock.isMultiblock() || tool == EditorTool.eraser) && tool != EditorTool.fill){
             if(tool == EditorTool.line && drawing){
@@ -306,7 +273,13 @@ public class MapView extends Element implements GestureListener{
             if((tool.edit || (tool == EditorTool.line && !drawing)) && (!mobile || drawing)){
                 Point2 p = project(mousex, mousey);
                 Vector2 v = unproject(p.x, p.y).add(x, y);
-                Lines.poly(brushPolygons[index], v.x, v.y, scaling);
+
+                //pencil square outline
+                if(tool == EditorTool.pencil && tool.mode == 1){
+                    Lines.square(v.x + scaling/2f, v.y + scaling/2f, scaling * (editor.brushSize + 0.5f));
+                }else{
+                    Lines.poly(brushPolygons[index], v.x, v.y, scaling);
+                }
             }
         }else{
             if((tool.edit || tool == EditorTool.line) && (!mobile || drawing)){
@@ -321,11 +294,10 @@ public class MapView extends Element implements GestureListener{
         }
 
         Draw.color(Pal.accent);
-        Lines.stroke(Unit.dp.scl(3f));
+        Lines.stroke(UnitScl.dp.scl(3f));
         Lines.rect(x, y, width, height);
         Draw.reset();
 
-        ScissorStack.popScissors();
         ScissorStack.popScissors();
     }
 
@@ -348,7 +320,7 @@ public class MapView extends Element implements GestureListener{
     public boolean zoom(float initialDistance, float distance){
         if(!active()) return false;
         float nzoom = distance - initialDistance;
-        zoom += nzoom / 10000f / Unit.dp.scl(1f) * zoom;
+        zoom += nzoom / 10000f / UnitScl.dp.scl(1f) * zoom;
         clampZoom();
         return false;
     }

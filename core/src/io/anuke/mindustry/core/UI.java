@@ -1,32 +1,35 @@
 package io.anuke.mindustry.core;
 
 import io.anuke.arc.*;
-import io.anuke.arc.Graphics.Cursor;
-import io.anuke.arc.Graphics.Cursor.SystemCursor;
-import io.anuke.arc.freetype.FreeTypeFontGenerator;
-import io.anuke.arc.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.Colors;
-import io.anuke.arc.graphics.g2d.BitmapFont;
-import io.anuke.arc.input.KeyCode;
-import io.anuke.arc.math.Interpolation;
+import io.anuke.arc.Graphics.*;
+import io.anuke.arc.Graphics.Cursor.*;
+import io.anuke.arc.freetype.*;
+import io.anuke.arc.freetype.FreeTypeFontGenerator.*;
+import io.anuke.arc.function.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.graphics.g2d.TextureAtlas.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.math.*;
 import io.anuke.arc.scene.*;
-import io.anuke.arc.scene.actions.Actions;
+import io.anuke.arc.scene.actions.*;
+import io.anuke.arc.scene.event.*;
+import io.anuke.arc.scene.style.*;
 import io.anuke.arc.scene.ui.*;
-import io.anuke.arc.scene.ui.TextField.TextFieldFilter;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.scene.ui.layout.Unit;
+import io.anuke.arc.scene.ui.TextField.*;
+import io.anuke.arc.scene.ui.Tooltip.*;
+import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
-import io.anuke.mindustry.editor.MapEditorDialog;
-import io.anuke.mindustry.game.EventType.ResizeEvent;
-import io.anuke.mindustry.graphics.Pal;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.editor.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
 import io.anuke.mindustry.ui.dialogs.*;
 import io.anuke.mindustry.ui.fragments.*;
 
 import static io.anuke.arc.scene.actions.Actions.*;
-import static io.anuke.mindustry.Vars.control;
-import static io.anuke.mindustry.Vars.disableUI;
+import static io.anuke.mindustry.Vars.*;
 
 public class UI implements ApplicationListener{
     private FreeTypeFontGenerator generator;
@@ -35,8 +38,9 @@ public class UI implements ApplicationListener{
     public HudFragment hudfrag;
     public ChatFragment chatfrag;
     public PlayerListFragment listfrag;
-    public BackgroundFragment backfrag;
     public LoadingFragment loadfrag;
+
+    public WidgetGroup menuGroup, hudGroup;
 
     public AboutDialog about;
     public GameOverDialog restart;
@@ -54,7 +58,6 @@ public class UI implements ApplicationListener{
     public BansDialog bans;
     public AdminsDialog admins;
     public TraceDialog traces;
-    public ChangelogDialog changelog;
     public DatabaseDialog database;
     public ContentInfoDialog content;
     public DeployDialog deploy;
@@ -67,6 +70,7 @@ public class UI implements ApplicationListener{
     public UI(){
         Skin skin = new Skin(Core.atlas);
         generateFonts(skin);
+        loadExtraStyle(skin);
         skin.load(Core.files.internal("sprites/uiskin.json"));
 
         for(BitmapFont font : skin.getAll(BitmapFont.class).values()){
@@ -76,62 +80,80 @@ public class UI implements ApplicationListener{
         Core.scene = new Scene(skin);
         Core.input.addProcessor(Core.scene);
 
-        Dialog.setShowAction(() -> sequence(
-        alpha(0f),
-        originCenter(),
-        moveToAligned(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f, Align.center),
-        scaleTo(0.0f, 1f),
-        parallel(
-        scaleTo(1f, 1f, 0.1f, Interpolation.fade),
-        fadeIn(0.1f, Interpolation.fade)
-        )
-        ));
+        Dialog.setShowAction(() -> sequence(alpha(0f), fadeIn(0.1f)));
+        Dialog.setHideAction(() -> sequence(fadeOut(0.1f)));
 
-        Dialog.setHideAction(() -> sequence(
-        parallel(
-        scaleTo(0.01f, 0.01f, 0.1f, Interpolation.fade),
-        fadeOut(0.1f, Interpolation.fade)
-        )
-        ));
-
-        TooltipManager.getInstance().animations = false;
+        Tooltips.getInstance().animations = false;
 
         Core.settings.setErrorHandler(e -> {
             e.printStackTrace();
             Core.app.post(() -> showError("Failed to access local storage.\nSettings will not be saved."));
         });
 
-        Colors.put("accent", Pal.accent);
-        Colors.put("stat", Pal.stat);
+        ClickListener.clicked = () -> Sounds.press.play();
 
-        loadCursors();
+        Colors.put("accent", Pal.accent);
+        Colors.put("highlight", Pal.accent.cpy().lerp(Color.WHITE, 0.3f));
+        Colors.put("stat", Pal.stat);
+        loadExtraCursors();
     }
 
-    void loadCursors(){
-        int cursorScaling = 1, outlineThickness = 3;
-        Color outlineColor = Color.valueOf("444444");
-
-        drillCursor = Core.graphics.newCursor("drill", cursorScaling, outlineColor, outlineThickness);
-        unloadCursor = Core.graphics.newCursor("unload", cursorScaling, outlineColor, outlineThickness);
-        SystemCursor.arrow.set(Core.graphics.newCursor("cursor", cursorScaling, outlineColor, outlineThickness));
-        SystemCursor.hand.set(Core.graphics.newCursor("hand", cursorScaling, outlineColor, outlineThickness));
-        SystemCursor.ibeam.set(Core.graphics.newCursor("ibeam", cursorScaling, outlineColor, outlineThickness));
+    /** Called from a static context to make the cursor appear immediately upon startup.*/
+    public static void loadSystemCursors(){
+        SystemCursor.arrow.set(Core.graphics.newCursor("cursor"));
+        SystemCursor.hand.set(Core.graphics.newCursor("hand"));
+        SystemCursor.ibeam.set(Core.graphics.newCursor("ibeam"));
 
         Core.graphics.restoreCursor();
     }
 
+    void loadExtraStyle(Skin skin){
+        AtlasRegion region = Core.atlas.find("flat-down-base");
+        int[] splits = region.splits;
+
+        ScaledNinePatchDrawable copy = new ScaledNinePatchDrawable(new NinePatch(region, splits[0], splits[1], splits[2], splits[3])){
+            public float getLeftWidth(){ return 0; }
+            public float getRightWidth(){ return 0; }
+            public float getTopHeight(){ return 0; }
+            public float getBottomHeight(){ return 0; }
+        };
+        copy.setMinWidth(0);
+        copy.setMinHeight(0);
+        copy.setTopHeight(0);
+        copy.setRightWidth(0);
+        copy.setBottomHeight(0);
+        copy.setLeftWidth(0);
+        skin.add("flat-down", copy, Drawable.class);
+    }
+
+    void loadExtraCursors(){
+        drillCursor = Core.graphics.newCursor("drill");
+        unloadCursor = Core.graphics.newCursor("unload");
+    }
+
     void generateFonts(Skin skin){
         generator = new FreeTypeFontGenerator(Core.files.internal("fonts/font.ttf"));
-        FreeTypeFontParameter param = new FreeTypeFontParameter();
-        param.size = (int)(9 * 2 * Math.max(Unit.dp.scl(1f), 0.5f));
-        param.shadowColor = Color.DARK_GRAY;
-        param.shadowOffsetY = 2;
-        param.incremental = true;
 
-        skin.add("default-font", generator.generateFont(param));
-        skin.add("default-font-chat", generator.generateFont(param));
-        skin.getFont("default-font").getData().markupEnabled = true;
-        skin.getFont("default-font").setOwnsTexture(false);
+        FreeTypeFontParameter param = new FreeTypeFontParameter(){{
+            size = (int)(UnitScl.dp.scl(18f));
+            shadowColor = Color.DARK_GRAY;
+            shadowOffsetY = 2;
+            incremental = true;
+        }};
+
+        FreeTypeFontParameter outlined = new FreeTypeFontParameter(){{
+            size = param.size;
+            borderColor = Color.DARK_GRAY;
+            borderWidth = UnitScl.dp.scl(2f);
+            spaceX -= borderWidth;
+            incremental = true;
+        }};
+
+        skin.add("outline", generator.generateFont(outlined));
+        skin.add("default", generator.generateFont(param));
+        skin.add("chat", generator.generateFont(param));
+        skin.getFont("default").getData().markupEnabled = true;
+        skin.getFont("default").setOwnsTexture(false);
     }
 
     @Override
@@ -140,15 +162,23 @@ public class UI implements ApplicationListener{
 
         Core.scene.act();
         Core.scene.draw();
+
+        //draw overlay for buttons
+        if(state.rules.tutorial){
+            control.tutorial.draw();
+            Draw.flush();
+        }
     }
 
     @Override
     public void init(){
+        menuGroup = new WidgetGroup();
+        hudGroup = new WidgetGroup();
+
         menufrag = new MenuFragment();
         hudfrag = new HudFragment();
         chatfrag = new ChatFragment();
         listfrag = new PlayerListFragment();
-        backfrag = new BackgroundFragment();
         loadfrag = new LoadingFragment();
 
         editor = new MapEditorDialog();
@@ -163,7 +193,6 @@ public class UI implements ApplicationListener{
         settings = new SettingsMenuDialog();
         host = new HostDialog();
         paused = new PausedDialog();
-        changelog = new ChangelogDialog();
         about = new AboutDialog();
         bans = new BansDialog();
         admins = new AdminsDialog();
@@ -177,13 +206,23 @@ public class UI implements ApplicationListener{
 
         Group group = Core.scene.root;
 
-        backfrag.build(group);
-        control.input().getFrag().build(group);
-        hudfrag.build(group);
-        menufrag.build(group);
-        chatfrag.container().build(group);
-        listfrag.build(group);
+        menuGroup.setFillParent(true);
+        menuGroup.touchable(Touchable.childrenOnly);
+        menuGroup.visible(() -> state.is(State.menu));
+        hudGroup.setFillParent(true);
+        hudGroup.touchable(Touchable.childrenOnly);
+        hudGroup.visible(() -> !state.is(State.menu));
+
+        Core.scene.add(menuGroup);
+        Core.scene.add(hudGroup);
+
+        control.input.getFrag().build(hudGroup);
+        hudfrag.build(hudGroup);
+        menufrag.build(menuGroup);
+        chatfrag.container().build(hudGroup);
+        listfrag.build(hudGroup);
         loadfrag.build(group);
+        new FadeInFragment().build(group);
     }
 
     @Override
@@ -209,12 +248,12 @@ public class UI implements ApplicationListener{
         });
     }
 
-    public void showTextInput(String titleText, String text, String def, TextFieldFilter filter, Consumer<String> confirmed){
+    public void showTextInput(String titleText, String text, int textLength, String def, TextFieldFilter filter, Consumer<String> confirmed){
         new Dialog(titleText, "dialog"){{
             cont.margin(30).add(text).padRight(6f);
             TextField field = cont.addField(def, t -> {
             }).size(170f, 50f).get();
-            field.setFilter((f, c) -> field.getText().length() < 12 && filter.acceptChar(f, c));
+            field.setFilter((f, c) -> field.getText().length() < textLength && filter.acceptChar(f, c));
             Platform.instance.addDialog(field);
             buttons.defaults().size(120, 54).pad(4);
             buttons.addButton("$ok", () -> {
@@ -226,7 +265,11 @@ public class UI implements ApplicationListener{
     }
 
     public void showTextInput(String title, String text, String def, Consumer<String> confirmed){
-        showTextInput(title, text, def, (field, c) -> true, confirmed);
+        showTextInput(title, text, 12, def, (field, c) -> true, confirmed);
+    }
+
+    public void showTextInput(String title, String text, int textLength, String def, Consumer<String> confirmed){
+        showTextInput(title, text, textLength < 0 ? 12 : textLength, def, (field, c) -> true, confirmed);
     }
 
     public void showInfoFade(String info){
@@ -246,8 +289,17 @@ public class UI implements ApplicationListener{
     }
 
     public void showError(String text){
-        new Dialog("$error.title", "dialog"){{
-            cont.margin(15).add(text).width(400f).wrap().get().setAlignment(Align.center, Align.center);
+        new Dialog("", "dialog"){{
+            setFillParent(true);
+            cont.add("$error.title");
+            cont.row();
+            cont.margin(15).pane(t -> {
+                Label l = t.add(text).pad(14f).get();
+                l.setAlignment(Align.center, Align.left);
+                if(mobile){
+                    t.getCell(l).wrap().width(400f);
+                }
+            });
             buttons.addButton("$ok", this::hide).size(90, 50).pad(4);
         }}.show();
     }
@@ -267,6 +319,10 @@ public class UI implements ApplicationListener{
     }
 
     public void showConfirm(String title, String text, Runnable confirmed){
+        showConfirm(title, text, null, confirmed);
+    }
+
+    public void showConfirm(String title, String text, BooleanProvider hide, Runnable confirmed){
         FloatingDialog dialog = new FloatingDialog(title);
         dialog.cont.add(text).width(500f).wrap().pad(4f).get().setAlignment(Align.center, Align.center);
         dialog.buttons.defaults().size(200f, 54f).pad(2f);
@@ -276,6 +332,13 @@ public class UI implements ApplicationListener{
             dialog.hide();
             confirmed.run();
         });
+        if(hide != null){
+            dialog.update(() -> {
+                if(hide.get()){
+                    dialog.hide();
+                }
+            });
+        }
         dialog.keyDown(KeyCode.ESCAPE, dialog::hide);
         dialog.keyDown(KeyCode.BACK, dialog::hide);
         dialog.show();

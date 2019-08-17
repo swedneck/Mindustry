@@ -2,6 +2,7 @@ package io.anuke.mindustry.graphics;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.graphics.Blending;
+import io.anuke.arc.graphics.Texture.TextureFilter;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.glutils.FrameBuffer;
 import io.anuke.arc.util.Disposable;
@@ -14,6 +15,10 @@ import static io.anuke.mindustry.Vars.renderer;
 
 public class Pixelator implements Disposable{
     private FrameBuffer buffer = new FrameBuffer(2, 2);
+
+    {
+        buffer.getTexture().setFilter(TextureFilter.Nearest, TextureFilter.Nearest);
+    }
 
     public void drawPixelate(){
         float pre = renderer.getScale();
@@ -50,7 +55,7 @@ public class Pixelator implements Disposable{
         Draw.rect(Draw.wrap(buffer.getTexture()), Core.camera.position.x, Core.camera.position.y, Core.camera.width, -Core.camera.height);
         Draw.blend();
 
-        renderer.drawAndInterpolate(playerGroup, p -> !p.isDead() && !p.isLocal, Player::drawName);
+        renderer.draw(playerGroup, p -> !p.isDead() && !p.isLocal, Player::drawName);
 
         Core.camera.position.set(px, py);
         Core.settings.put("animatedwater", hadWater);

@@ -2,8 +2,7 @@ package io.anuke.mindustry.world.blocks.power;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
+import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Vector2;
 import io.anuke.arc.util.Time;
@@ -11,6 +10,7 @@ import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.Damage;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.type.TileEntity;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.Liquid;
@@ -31,11 +31,11 @@ public class NuclearReactor extends PowerGenerator{
 
     protected Color coolColor = new Color(1, 1, 1, 0f);
     protected Color hotColor = Color.valueOf("ff9575a3");
-    protected int itemDuration = 120; //time to consume 1 fuel
+    protected float itemDuration = 120; //time to consume 1 fuel
     protected float heating = 0.01f; //heating per frame * fullness
     protected float smokeThreshold = 0.3f; //threshold at which block starts smoking
-    protected int explosionRadius = 19;
-    protected int explosionDamage = 135;
+    protected int explosionRadius = 40;
+    protected int explosionDamage = 1350;
     protected float flashThreshold = 0.46f; //heat threshold at which the lights start flashing
     protected float coolantPower = 0.5f;
 
@@ -86,7 +86,7 @@ public class NuclearReactor extends PowerGenerator{
         if(fuel > 0){
             entity.heat += fullness * heating * Math.min(entity.delta(), 4f);
 
-            if(entity.timer.get(timerFuel, itemDuration)){
+            if(entity.timer.get(timerFuel, itemDuration / entity.timeScale)){
                 entity.cons.trigger();
             }
         }
@@ -119,6 +119,8 @@ public class NuclearReactor extends PowerGenerator{
     public void onDestroyed(Tile tile){
         super.onDestroyed(tile);
 
+        Sounds.explosionbig.at(tile);
+
         NuclearReactorEntity entity = tile.entity();
 
         int fuel = entity.items.get(consumes.<ConsumeItems>get(ConsumeType.item).items[0].item);
@@ -132,7 +134,6 @@ public class NuclearReactor extends PowerGenerator{
         }
 
         Damage.damage(tile.worldx(), tile.worldy(), explosionRadius * tilesize, explosionDamage * 4);
-
 
         for(int i = 0; i < 20; i++){
             Time.run(Mathf.random(50), () -> {
@@ -156,7 +157,7 @@ public class NuclearReactor extends PowerGenerator{
         NuclearReactorEntity entity = tile.entity();
 
         Draw.color(coolColor, hotColor, entity.heat);
-        Draw.rect("white", tile.drawx(), tile.drawy(), size * tilesize, size * tilesize);
+        Fill.rect(tile.drawx(), tile.drawy(), size * tilesize, size * tilesize);
 
         Draw.color(entity.liquids.current().color);
         Draw.alpha(entity.liquids.currentAmount() / liquidCapacity);
@@ -184,11 +185,13 @@ public class NuclearReactor extends PowerGenerator{
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeFloat(heat);
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             heat = stream.readFloat();
         }
     }

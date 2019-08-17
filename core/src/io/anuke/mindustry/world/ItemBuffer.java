@@ -1,7 +1,10 @@
 package io.anuke.mindustry.world;
 
-import io.anuke.arc.util.*;
+import io.anuke.arc.util.Pack;
+import io.anuke.arc.util.Time;
 import io.anuke.mindustry.type.Item;
+
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.content;
 
@@ -22,7 +25,7 @@ public class ItemBuffer{
 
     public void accept(Item item, short data){
         //if(!accepts()) return;
-        buffer[index++] = Pack.longInt(NumberUtils.floatToIntBits(Time.time()), Pack.shortInt((short)item.id, data));
+        buffer[index++] = Pack.longInt(Float.floatToIntBits(Time.time()), Pack.shortInt((short)item.id, data));
     }
 
     public void accept(Item item){
@@ -32,7 +35,7 @@ public class ItemBuffer{
     public Item poll(){
         if(index > 0){
             long l = buffer[0];
-            float time = NumberUtils.intBitsToFloat(Pack.leftInt(l));
+            float time = Float.intBitsToFloat(Pack.leftInt(l));
 
             if(Time.time() >= time + speed || Time.time() < time){
                 return content.item(Pack.leftShort(Pack.rightInt(l)));
@@ -44,7 +47,7 @@ public class ItemBuffer{
     public short pollData(){
         if(index > 0){
             long l = buffer[0];
-            float time = NumberUtils.intBitsToFloat(Pack.leftInt(l));
+            float time = Float.intBitsToFloat(Pack.leftInt(l));
 
             if(Time.time() >= time + speed || Time.time() < time){
                 return Pack.rightShort(Pack.rightInt(l));
@@ -56,5 +59,24 @@ public class ItemBuffer{
     public void remove(){
         System.arraycopy(buffer, 1, buffer, 0, index - 1);
         index--;
+    }
+
+    public void write(DataOutput stream) throws IOException{
+        stream.writeByte((byte)index);
+        stream.writeByte((byte)buffer.length);
+        for(long l : buffer){
+            stream.writeLong(l);
+        }
+    }
+
+    public void read(DataInput stream) throws IOException{
+        index = stream.readByte();
+        byte length = stream.readByte();
+        for(int i = 0; i < length; i++){
+            long l = stream.readLong();
+            if(i < buffer.length){
+                buffer[i] = l;
+            }
+        }
     }
 }

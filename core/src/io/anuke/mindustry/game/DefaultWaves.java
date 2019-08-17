@@ -5,19 +5,26 @@ import io.anuke.mindustry.content.*;
 import io.anuke.mindustry.type.ItemStack;
 
 public class DefaultWaves{
-    private static Array<SpawnGroup> spawns;
+    private Array<SpawnGroup> spawns;
 
-    public static Array<SpawnGroup> get(){
+    public Array<SpawnGroup> get(){
         if(spawns == null && UnitTypes.dagger != null){
             spawns = Array.with(
             new SpawnGroup(UnitTypes.dagger){{
-                end = 8;
+                end = 10;
+                unitScaling = 2f;
+            }},
+
+            new SpawnGroup(UnitTypes.crawler){{
+                begin = 4;
+                end = 13;
+                unitAmount = 2;
                 unitScaling = 1.5f;
             }},
 
             new SpawnGroup(UnitTypes.wraith){{
                 begin = 12;
-                end = 14;
+                end = 16;
                 unitScaling = 1f;
             }},
 
@@ -29,7 +36,7 @@ public class DefaultWaves{
             }},
 
             new SpawnGroup(UnitTypes.titan){{
-                begin = 9;
+                begin = 7;
                 spacing = 3;
                 unitScaling = 2;
 
@@ -39,7 +46,7 @@ public class DefaultWaves{
             new SpawnGroup(UnitTypes.dagger){{
                 begin = 8;
                 unitScaling = 1;
-                unitAmount = 1;
+                unitAmount = 4;
                 spacing = 2;
             }},
 
@@ -69,8 +76,6 @@ public class DefaultWaves{
                 begin = 16;
                 unitScaling = 1;
                 spacing = 2;
-
-                max = 12;
             }},
 
             new SpawnGroup(UnitTypes.dagger){{
@@ -119,8 +124,7 @@ public class DefaultWaves{
                 begin = 40;
                 unitAmount = 2;
                 spacing = 2;
-                unitScaling = 3;
-                max = 8;
+                unitScaling = 2;
             }},
 
             new SpawnGroup(UnitTypes.wraith){{
@@ -129,7 +133,6 @@ public class DefaultWaves{
                 unitScaling = 3;
                 spacing = 5;
                 effect = StatusEffects.overdrive;
-                max = 8;
             }},
 
             new SpawnGroup(UnitTypes.revenant){{
@@ -137,7 +140,7 @@ public class DefaultWaves{
                 unitAmount = 2;
                 unitScaling = 3;
                 spacing = 5;
-                max = 8;
+                max = 16;
             }},
 
             new SpawnGroup(UnitTypes.ghoul){{
@@ -145,7 +148,6 @@ public class DefaultWaves{
                 unitAmount = 2;
                 unitScaling = 3;
                 spacing = 4;
-                max = 8;
             }},
 
             new SpawnGroup(UnitTypes.eruptor){{
@@ -155,12 +157,32 @@ public class DefaultWaves{
                 spacing = 3;
             }},
 
+            new SpawnGroup(UnitTypes.chaosArray){{
+                begin = 41;
+                unitAmount = 1;
+                unitScaling = 1;
+                spacing = 30;
+            }},
+
+            new SpawnGroup(UnitTypes.eradicator){{
+                begin = 81;
+                unitAmount = 1;
+                unitScaling = 1;
+                spacing = 40;
+            }},
+
+            new SpawnGroup(UnitTypes.lich){{
+                begin = 131;
+                unitAmount = 1;
+                unitScaling = 1;
+                spacing = 40;
+            }},
+
             new SpawnGroup(UnitTypes.ghoul){{
                 begin = 90;
                 unitAmount = 2;
                 unitScaling = 3;
                 spacing = 4;
-                max = 8;
             }}
             );
         }

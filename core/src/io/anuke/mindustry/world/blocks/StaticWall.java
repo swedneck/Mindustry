@@ -1,15 +1,12 @@
 package io.anuke.mindustry.world.blocks;
 
 import io.anuke.arc.Core;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
+import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.math.Mathf;
 import io.anuke.mindustry.graphics.CacheLayer;
-import io.anuke.mindustry.world.Pos;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.*;
 
-import static io.anuke.mindustry.Vars.tilesize;
-import static io.anuke.mindustry.Vars.world;
+import static io.anuke.mindustry.Vars.*;
 
 public class StaticWall extends Rock{
     TextureRegion large;
@@ -45,7 +42,8 @@ public class StaticWall extends Rock{
     }
 
     boolean eq(int rx, int ry){
-        return world.tile(rx + 1, ry).block() == this
+        return rx < world.width() - 1 && ry < world.height() - 1
+        && world.tile(rx + 1, ry).block() == this
         && world.tile(rx, ry + 1).block() == this
         && world.tile(rx, ry).block() == this
         && world.tile(rx + 1, ry + 1).block() == this;

@@ -25,11 +25,6 @@ import io.anuke.mindustry.world.meta.*;
 import java.io.*;
 
 public class UnitFactory extends Block{
-    //for attack mode
-    protected float gracePeriodMultiplier = 15f;
-    protected float speedupTime = 60f * 60f * 20;
-    protected float maxSpeedup = 2f;
-
     protected UnitType type;
     protected float produceTime = 1000f;
     protected float launchVelocity = 0f;
@@ -132,7 +127,7 @@ public class UnitFactory extends Block{
         Shaders.build.progress = entity.buildTime / produceTime;
         Shaders.build.color.set(Pal.accent);
         Shaders.build.color.a = entity.speedScl;
-        Shaders.build.time = -entity.time / 10f;
+        Shaders.build.time = -entity.time / 20f;
 
         Draw.shader(Shaders.build);
         Draw.rect(region, tile.drawx(), tile.drawy());
@@ -142,7 +137,7 @@ public class UnitFactory extends Block{
         Draw.alpha(entity.speedScl);
 
         Lines.lineAngleCenter(
-        tile.drawx() + Mathf.sin(entity.time, 6f, Vars.tilesize / 2f * size - 2f),
+        tile.drawx() + Mathf.sin(entity.time, 20f, Vars.tilesize / 2f * size - 2f),
         tile.drawy(),
         90,
         size * Vars.tilesize - 4f);
@@ -160,25 +155,9 @@ public class UnitFactory extends Block{
             return;
         }
 
-        if(tile.isEnemyCheat()){
-            entity.warmup += entity.delta();
-        }
-
-        if(!tile.isEnemyCheat()){
-            //player-made spawners have default behavior
-            if(entity.cons.valid()){
-                entity.time += entity.delta() * entity.speedScl * Vars.state.rules.unitBuildSpeedMultiplier;
-                entity.buildTime += entity.delta() * entity.power.satisfaction * Vars.state.rules.unitBuildSpeedMultiplier;
-                entity.speedScl = Mathf.lerpDelta(entity.speedScl, 1f, 0.05f);
-            }else{
-                entity.speedScl = Mathf.lerpDelta(entity.speedScl, 0f, 0.05f);
-            }
-            //check if grace period had passed
-        }else if(entity.warmup > produceTime * gracePeriodMultiplier){
-            float speedMultiplier = Math.min(0.1f + (entity.warmup - produceTime * gracePeriodMultiplier) / speedupTime, maxSpeedup);
-            entity.time += entity.delta() * entity.speedScl;
-            //otherwise, it's an enemy, cheat by not requiring resources
-            entity.buildTime += entity.delta() * speedMultiplier;
+        if(entity.cons.valid() || tile.isEnemyCheat()){
+            entity.time += entity.delta() * entity.speedScl * Vars.state.rules.unitBuildSpeedMultiplier * entity.power.satisfaction;
+            entity.buildTime += entity.delta() * entity.power.satisfaction * Vars.state.rules.unitBuildSpeedMultiplier;
             entity.speedScl = Mathf.lerpDelta(entity.speedScl, 1f, 0.05f);
         }else{
             entity.speedScl = Mathf.lerpDelta(entity.speedScl, 0f, 0.05f);
@@ -193,7 +172,6 @@ public class UnitFactory extends Block{
             entity.cons.trigger();
         }
     }
-
     @Override
     public int getMaximumAccepted(Tile tile, Item item){
         return capacities[item.id];
@@ -214,20 +192,19 @@ public class UnitFactory extends Block{
         float buildTime;
         float time;
         float speedScl;
-        float warmup; //only for enemy spawners
         int spawned;
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeFloat(buildTime);
-            stream.writeFloat(warmup);
             stream.writeInt(spawned);
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             buildTime = stream.readFloat();
-            warmup = stream.readFloat();
             spawned = stream.readInt();
         }
     }

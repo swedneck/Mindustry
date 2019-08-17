@@ -22,11 +22,12 @@ import static io.anuke.mindustry.Vars.*;
 
 public class OverlayRenderer{
     private static final float indicatorLength = 14f;
+    private static final float spawnerMargin = tilesize*11f;
     private static final Rectangle rect = new Rectangle();
     private float buildFadeTime;
 
     public void drawBottom(){
-        InputHandler input = control.input();
+        InputHandler input = control.input;
 
         if(!input.isDrawing() || player.isDead()) return;
 
@@ -50,7 +51,7 @@ public class OverlayRenderer{
                 }
             }
 
-            Units.allUnits(unit -> {
+            Units.all(unit -> {
                 if(unit != player && unit.getTeam() != player.getTeam() && !rect.setSize(Core.camera.width * 0.9f, Core.camera.height * 0.9f).setCenter(Core.camera.position.x, Core.camera.position.y).contains(unit.x, unit.y)){
                     Tmp.v1.set(unit.x, unit.y).sub(Core.camera.position.x, Core.camera.position.y).setLength(indicatorLength);
 
@@ -63,7 +64,7 @@ public class OverlayRenderer{
 
         if(player.isDead()) return; //dead players don't draw
 
-        InputHandler input = control.input();
+        InputHandler input = control.input;
 
         //draw config selected block
         if(input.frag.config.isShown()){
@@ -84,27 +85,37 @@ public class OverlayRenderer{
                     float dst = Mathf.dst(player.x, player.y, core.drawx(), core.drawy());
                     if(dst < state.rules.enemyCoreBuildRadius * 1.5f){
                         Draw.color(Color.DARK_GRAY);
-                        Lines.poly(core.drawx(), core.drawy() - 2, 200, state.rules.enemyCoreBuildRadius);
+                        Lines.circle(core.drawx(), core.drawy() - 2, state.rules.enemyCoreBuildRadius);
                         Draw.color(Pal.accent, enemy.color, 0.5f + Mathf.absin(Time.time(), 10f, 0.5f));
-                        Lines.poly(core.drawx(), core.drawy(), 200, state.rules.enemyCoreBuildRadius);
+                        Lines.circle(core.drawx(), core.drawy(), state.rules.enemyCoreBuildRadius);
                     }
                 }
             }
         }
 
-        Draw.reset();
+        Lines.stroke(2f);
+        Draw.color(Color.GRAY, Color.LIGHT_GRAY, Mathf.absin(Time.time(), 8f, 1f));
 
-        //draw selected block bars and info
-        if(input.block == null && !Core.scene.hasMouse()){
-            Vector2 vec = Core.input.mouseWorld(input.getMouseX(), input.getMouseY());
-            Tile tile = world.tileWorld(vec.x, vec.y);
-
-            if(tile != null && tile.block() != Blocks.air && tile.target().getTeam() == player.getTeam()){
-                Tile target = tile.target();
-                target.block().drawSelect(target);
+        for(Tile tile : world.spawner.getGroundSpawns()){
+            if(tile.withinDst(player.x, player.y, state.rules.dropZoneRadius + spawnerMargin)){
+                Draw.alpha(Mathf.clamp(1f - (player.dst(tile) - state.rules.dropZoneRadius) / spawnerMargin));
+                Lines.dashCircle(tile.worldx(), tile.worldy(), state.rules.dropZoneRadius);
             }
         }
 
+        Draw.reset();
+
+        //draw selected block
+        if(input.block == null && !Core.scene.hasMouse()){
+            Vector2 vec = Core.input.mouseWorld(input.getMouseX(), input.getMouseY());
+            Tile tile = world.ltileWorld(vec.x, vec.y);
+
+            if(tile != null && tile.block() != Blocks.air && tile.getTeam() == player.getTeam()){
+                tile.block().drawSelect(tile);
+            }
+        }
+
+        //draw selection overlay when dropping item
         if(input.isDroppingItem()){
             Vector2 v = Core.input.mouseWorld(input.getMouseX(), input.getMouseY());
             float size = 8;
@@ -113,12 +124,14 @@ public class OverlayRenderer{
             Lines.circle(v.x, v.y, 6 + Mathf.absin(Time.time(), 5f, 1f));
             Draw.reset();
 
-            Tile tile = world.tileWorld(v.x, v.y);
-            if(tile != null) tile = tile.target();
+            Tile tile = world.ltileWorld(v.x, v.y);
             if(tile != null && tile.interactable(player.getTeam()) && tile.block().acceptStack(player.item().item, player.item().amount, tile, player) > 0){
-                Draw.color(Pal.place);
-                Lines.square(tile.drawx(), tile.drawy(), tile.block().size * tilesize / 2f + 1 + Mathf.absin(Time.time(), 5f, 1f));
-                Draw.color();
+                Lines.stroke(3f, Pal.gray);
+                Lines.square(tile.drawx(), tile.drawy(), tile.block().size * tilesize / 2f + 3 + Mathf.absin(Time.time(), 5f, 1f));
+                Lines.stroke(1f, Pal.place);
+                Lines.square(tile.drawx(), tile.drawy(), tile.block().size * tilesize / 2f + 2 + Mathf.absin(Time.time(), 5f, 1f));
+                Draw.reset();
+
             }
         }
     }

@@ -1,39 +1,47 @@
 package io.anuke.mindustry.world;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Graphics.Cursor;
-import io.anuke.arc.Graphics.Cursor.SystemCursor;
-import io.anuke.arc.collection.Array;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.Graphics.*;
+import io.anuke.arc.Graphics.Cursor.*;
+import io.anuke.arc.audio.*;
 import io.anuke.arc.collection.EnumSet;
-import io.anuke.arc.function.BooleanProvider;
-import io.anuke.arc.function.Function;
-import io.anuke.arc.graphics.Color;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.function.*;
+import io.anuke.arc.graphics.*;
 import io.anuke.arc.graphics.g2d.*;
-import io.anuke.arc.graphics.g2d.TextureAtlas.AtlasRegion;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Align;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.pooling.Pools;
-import io.anuke.mindustry.entities.Damage;
-import io.anuke.mindustry.entities.bullet.Bullet;
-import io.anuke.mindustry.entities.effect.Puddle;
-import io.anuke.mindustry.entities.effect.RubbleDecal;
+import io.anuke.arc.graphics.g2d.TextureAtlas.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.pooling.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.bullet.*;
+import io.anuke.mindustry.entities.effect.*;
+import io.anuke.mindustry.entities.type.Unit;
 import io.anuke.mindustry.entities.type.*;
-import io.anuke.mindustry.game.UnlockableContent;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.graphics.*;
-import io.anuke.mindustry.input.InputHandler.PlaceDraw;
+import io.anuke.mindustry.input.InputHandler.*;
+import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.ui.Bar;
-import io.anuke.mindustry.ui.ContentDisplay;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.world.blocks.*;
+import io.anuke.mindustry.world.blocks.power.*;
 import io.anuke.mindustry.world.consumers.*;
 import io.anuke.mindustry.world.meta.*;
 
-import java.util.Arrays;
+import java.util.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class Block extends BlockStorage{
+    public static final int crackRegions = 8, maxCrackSize = 5;
+
+    private static final BooleanProvider invisible = () -> false;
+
     /** whether this block has a tile entity that updates */
     public boolean update;
     /** whether this block has health and can be destroyed */
@@ -70,8 +78,6 @@ public class Block extends BlockStorage{
     public Layer layer2 = null;
     /** whether this block can be replaced in all cases */
     public boolean alwaysReplace = false;
-    /** whether this block has instant transfer checking. used for calculations to prevent infinite loops. */
-    public boolean instantTransfer = false;
     /** The block group. Unless {@link #canReplace} is overriden, blocks in the same group can replace each other. */
     public BlockGroup group = BlockGroup.none;
     /** List of block flags. Used for AI indexing. */
@@ -93,6 +99,18 @@ public class Block extends BlockStorage{
     public boolean outlineIcon = false;
     /** Whether this block has a shadow under it. */
     public boolean hasShadow = true;
+    /** Sounds made when this block breaks.*/
+    public Sound breakSound = Sounds.boom;
+
+    /** The sound that this block makes while active. One sound loop. Do not overuse.*/
+    public Sound activeSound = Sounds.none;
+    /** Active sound base volume. */
+    public float activeSoundVolume = 0.5f;
+
+    /** The sound that this block makes while idle. Uses one sound loop for all blocks.*/
+    public Sound idleSound = Sounds.none;
+    /** Idle sound base volume. */
+    public float idleSoundVolume = 0.5f;
 
     /** Cost of constructing this block. */
     public ItemStack[] buildRequirements = new ItemStack[]{};
@@ -101,7 +119,9 @@ public class Block extends BlockStorage{
     /** Cost of building this block; do not modify directly! */
     public float buildCost;
     /** Whether this block is visible and can currently be built. */
-    public BooleanProvider buildVisibility = () -> false;
+    public BooleanProvider buildVisibility = invisible;
+    /** Whether this block has instant transfer.*/
+    public boolean instantTransfer = false;
     public boolean alwaysUnlocked = false;
 
     protected TextureRegion[] cacheRegions = {};
@@ -113,6 +133,13 @@ public class Block extends BlockStorage{
     protected TextureRegion[] variantRegions, editorVariantRegions;
     protected TextureRegion region, editorIcon;
 
+    protected static TextureRegion[][] cracks;
+
+    /** Dump timer ID.*/
+    protected final int timerDump = timers++;
+    /** How often to try dumping items in ticks, e.g. 5 = 12 times/sec*/
+    protected final int dumpTime = 5;
+
     public Block(String name){
         super(name);
         this.description = Core.bundle.getOrNull("block." + name + ".description");
@@ -121,6 +148,14 @@ public class Block extends BlockStorage{
 
     public boolean canBreak(Tile tile){
         return true;
+    }
+
+    public boolean isBuildable(){
+        return buildVisibility != invisible;
+    }
+
+    public boolean isStatic(){
+        return cacheLayer == CacheLayer.walls;
     }
 
     public void onProximityRemoved(Tile tile){
@@ -183,18 +218,29 @@ public class Block extends BlockStorage{
         return progressIncrease;
     }
 
-    public boolean isLayer(Tile tile){
-        return true;
+    /** @return whether this block should play its active sound.*/
+    public boolean shouldActiveSound(Tile tile){
+        return false;
     }
 
-    public boolean isLayer2(Tile tile){
-        return true;
+    /** @return whether this block should play its idle sound.*/
+    public boolean shouldIdleSound(Tile tile){
+        return canProduce(tile);
     }
 
     public void drawLayer(Tile tile){
     }
 
     public void drawLayer2(Tile tile){
+    }
+
+    public void drawCracks(Tile tile){
+        if(!tile.entity.damaged()) return;
+        int id = tile.pos();
+        TextureRegion region = cracks[size - 1][Mathf.clamp((int)((1f - tile.entity.healthf()) * crackRegions), 0, crackRegions-1)];
+        Draw.colorl(0.2f, 0.1f + (1f - tile.entity.healthf())* 0.6f);
+        Draw.rect(region, tile.drawx(), tile.drawy(), (id%4)*90);
+        Draw.color();
     }
 
     /** Draw the block overlay that is shown when a cursor is over the block. */
@@ -205,32 +251,38 @@ public class Block extends BlockStorage{
     public void drawPlace(int x, int y, int rotation, boolean valid){
     }
 
-    protected void drawPlaceText(String text, int x, int y, boolean valid){
-        if(renderer.pixelator.enabled()) return;
+    protected float drawPlaceText(String text, int x, int y, boolean valid){
+        if(renderer.pixelator.enabled()) return 0;
 
         Color color = valid ? Pal.accent : Pal.remove;
-        BitmapFont font = Core.scene.skin.getFont("default-font");
+        BitmapFont font = Core.scene.skin.getFont("outline");
         GlyphLayout layout = Pools.obtain(GlyphLayout.class, GlyphLayout::new);
         boolean ints = font.usesIntegerPositions();
         font.setUseIntegerPositions(false);
-        font.getData().setScale(1f / 4f);
+        font.getData().setScale(1f / 4f / UnitScl.dp.scl(1f));
         layout.setText(font, text);
 
+        float width = layout.width;
+
         font.setColor(color);
-        float dx = x * tilesize + offset(), dy = y * tilesize + offset() + size * tilesize / 2f + 2;
+        float dx = x * tilesize + offset(), dy = y * tilesize + offset() + size * tilesize / 2f + 3;
         font.draw(text, dx, dy + layout.height + 1, Align.center);
+        dy -= 1f;
+        Lines.stroke(2f, Color.DARK_GRAY);
+        Lines.line(dx - layout.width / 2f - 2f, dy, dx + layout.width / 2f + 1.5f, dy);
         Lines.stroke(1f, color);
-        Lines.line(dx - layout.width / 2f - 2f, dy, dx + layout.width / 2f + 2f, dy);
+        Lines.line(dx - layout.width / 2f - 2f, dy, dx + layout.width / 2f + 1.5f, dy);
 
         font.setUseIntegerPositions(ints);
         font.setColor(Color.WHITE);
         font.getData().setScale(1f);
         Draw.reset();
         Pools.free(layout);
+        return width;
     }
 
     public void draw(Tile tile){
-        Draw.rect(region, tile.drawx(), tile.drawy(), rotate ? tile.getRotation() * 90 : 0);
+        Draw.rect(region, tile.drawx(), tile.drawy(), rotate ? tile.rotation() * 90 : 0);
     }
 
     public void drawTeam(Tile tile){
@@ -240,14 +292,36 @@ public class Block extends BlockStorage{
     }
 
     /** Called after the block is placed by this client. */
+    @CallSuper
     public void playerPlaced(Tile tile){
-    }
-
-    public void removed(Tile tile){
+        if(outputsPower && !consumesPower){
+            PowerNode.lastPlaced = tile.pos();
+        }
     }
 
     /** Called after the block is placed by anyone. */
+    @CallSuper
     public void placed(Tile tile){
+        if(Net.client()) return;
+
+        if((consumesPower && !outputsPower) || (!consumesPower && outputsPower)){
+            int range = 10;
+            tempTiles.clear();
+            Geometry.circle(tile.x, tile.y, range, (x, y) -> {
+                Tile other = world.ltile(x, y);
+                if(other != null && other.block instanceof PowerNode && ((PowerNode)other.block).linkValid(other, tile) && !other.entity.proximity().contains(tile) &&
+                !(outputsPower && tile.entity.proximity().contains(p -> p.entity != null && p.entity.power != null && p.entity.power.graph == other.entity.power.graph))){
+                    tempTiles.add(other);
+                }
+            });
+            tempTiles.sort(Structs.comparingFloat(t -> t.dst2(tile)));
+            if(!tempTiles.isEmpty()){
+                Call.linkPowerNodes(null, tempTiles.first(), tile);
+            }
+        }
+    }
+
+    public void removed(Tile tile){
     }
 
     /** Called every frame a unit is on this tile. */
@@ -256,7 +330,6 @@ public class Block extends BlockStorage{
 
     /** Called when a unit that spawned at this tile is removed. */
     public void unitRemoved(Tile tile, Unit unit){
-
     }
 
     /** Returns whether ot not this block can be place on the specified tile. */
@@ -266,7 +339,8 @@ public class Block extends BlockStorage{
 
     /** Call when some content is produced. This unlocks the content if it is applicable. */
     public void useContent(Tile tile, UnlockableContent content){
-        if(!headless && tile.getTeam() == player.getTeam()){
+        //only unlocks content in zones
+        if(!headless && tile.getTeam() == player.getTeam() && world.isZone()){
             logic.handleContent(content);
         }
     }
@@ -288,7 +362,7 @@ public class Block extends BlockStorage{
 
     @Override
     public TextureRegion getContentIcon(){
-        return icon(Icon.large);
+        return icon(Icon.medium);
     }
 
     @Override
@@ -303,6 +377,7 @@ public class Block extends BlockStorage{
 
     /** Called after all blocks are created. */
     @Override
+    @CallSuper
     public void init(){
         //initialize default health based on size
         if(health == -1){
@@ -318,6 +393,10 @@ public class Block extends BlockStorage{
         setBars();
 
         consumes.init();
+
+        if(!outputsPower && consumes.hasPower() && consumes.getPower().buffered){
+            throw new IllegalArgumentException("Consumer using buffered power: " + name);
+        }
     }
 
     @Override
@@ -327,6 +406,15 @@ public class Block extends BlockStorage{
         cacheRegions = new TextureRegion[cacheRegionStrings.size];
         for(int i = 0; i < cacheRegions.length; i++){
             cacheRegions[i] = Core.atlas.find(cacheRegionStrings.get(i));
+        }
+
+        if(cracks == null || (cracks[0][0].getTexture() != null && cracks[0][0].getTexture().isDisposed())){
+            cracks = new TextureRegion[maxCrackSize][crackRegions];
+            for(int size = 1; size <= maxCrackSize; size++){
+                for(int i = 0; i < crackRegions; i++){
+                    cracks[size - 1][i] = Core.atlas.find("cracks-" + size + "-" + i);
+                }
+            }
         }
     }
 
@@ -390,6 +478,7 @@ public class Block extends BlockStorage{
     public void setStats(){
         stats.add(BlockStat.size, "{0}x{0}", size);
         stats.add(BlockStat.health, health, StatUnit.none);
+        stats.add(BlockStat.buildTime, buildCost / 60, StatUnit.seconds);
 
         consumes.display(stats);
 
@@ -409,20 +498,26 @@ public class Block extends BlockStorage{
             }else{
                 current = entity -> entity.liquids.current();
             }
-            bars.add("liquid", entity -> new Bar(() -> entity.liquids.get(current.get(entity)) <= 0.001f ? Core.bundle.get("bar.liquid") : current.get(entity).localizedName(), () -> current.get(entity).color, () -> entity.liquids.get(current.get(entity)) / liquidCapacity));
+            bars.add("liquid", entity -> new Bar(() -> entity.liquids.get(current.get(entity)) <= 0.001f ? Core.bundle.get("bar.liquid") : current.get(entity).localizedName(),
+                    () -> current.get(entity).color, () -> entity.liquids.get(current.get(entity)) / liquidCapacity));
         }
 
         if(hasPower && consumes.hasPower()){
-            boolean buffered = consumes.getPower().isBuffered;
-            float capacity = consumes.getPower().powerCapacity;
+            ConsumePower cons = consumes.getPower();
+            boolean buffered = cons.buffered;
+            float capacity = cons.capacity;
 
             bars.add("power", entity -> new Bar(() -> buffered ? Core.bundle.format("bar.poweramount", Float.isNaN(entity.power.satisfaction * capacity) ? "<ERROR>" : (int)(entity.power.satisfaction * capacity)) :
-            Core.bundle.get("bar.power"), () -> Pal.powerBar, () -> entity.power.satisfaction));
+                Core.bundle.get("bar.power"), () -> Pal.powerBar, () -> Mathf.isZero(cons.requestedPower(entity)) && entity.power.graph.getPowerProduced() + entity.power.graph.getBatteryStored() > 0f ? 1f : entity.power.satisfaction));
         }
 
         if(hasItems && configurable){
             bars.add("items", entity -> new Bar(() -> Core.bundle.format("bar.items", entity.items.total()), () -> Pal.items, () -> (float)entity.items.total() / itemCapacity));
         }
+    }
+
+    public Tile linked(Tile tile){
+        return tile;
     }
 
     public boolean isSolidFor(Tile tile){
@@ -448,11 +543,6 @@ public class Block extends BlockStorage{
         return (hasItems && itemCapacity > 0);
     }
 
-    /** Called after the block is destroyed and removed. */
-    public void afterDestroyed(Tile tile, TileEntity entity){
-
-    }
-
     /** Called when the block is destroyed. */
     public void onDestroyed(Tile tile){
         float x = tile.worldx(), y = tile.worldy();
@@ -473,8 +563,8 @@ public class Block extends BlockStorage{
             explosiveness += tile.entity.liquids.sum((liquid, amount) -> liquid.flammability * amount / 2f);
         }
 
-        if(consumes.hasPower() && consumes.getPower().isBuffered){
-            power += tile.entity.power.satisfaction * consumes.getPower().powerCapacity;
+        if(consumes.hasPower() && consumes.getPower().buffered){
+            power += tile.entity.power.satisfaction * consumes.getPower().capacity;
         }
 
         if(hasLiquids){
@@ -549,6 +639,7 @@ public class Block extends BlockStorage{
     public void displayConsumption(Tile tile, Table table){
         table.left();
         for(Consume cons : consumes.all()){
+            if(cons.isOptional() && cons.isBoost()) continue;
             cons.build(tile, table);
         }
     }
@@ -562,7 +653,8 @@ public class Block extends BlockStorage{
 
     public TextureRegion icon(Icon icon){
         if(icons[icon.ordinal()] == null){
-            icons[icon.ordinal()] = Core.atlas.find(name + "-icon-" + icon.name(), icon == Icon.full ? getGeneratedIcons()[0] : Core.atlas.find(name + "-icon-full", getGeneratedIcons()[0]));
+            icons[icon.ordinal()] = Core.atlas.find(name + "-icon-" + icon.name(), icon == Icon.full ?
+                getGeneratedIcons()[0] : Core.atlas.find(name + "-icon-full", getGeneratedIcons()[0]));
         }
         return icons[icon.ordinal()];
     }
@@ -631,6 +723,18 @@ public class Block extends BlockStorage{
         return buildVisibility.get() && !isHidden();
     }
 
+    public boolean isFloor(){
+        return this instanceof Floor;
+    }
+
+    public boolean isOverlay(){
+        return this instanceof OverlayFloor;
+    }
+
+    public Floor asFloor(){
+        return (Floor)this;
+    }
+
     @Override
     public boolean isHidden(){
         return !buildVisibility.get();
@@ -660,10 +764,11 @@ public class Block extends BlockStorage{
     }
 
     public enum Icon{
+        //these are stored in the UI atlases
         small(8 * 3),
         medium(8 * 4),
         large(8 * 6),
-        /** uses whatever the size of the block is */
+        /** uses whatever the size of the block is. this is always stored in the main game atlas! */
         full(0);
 
         public final int size;

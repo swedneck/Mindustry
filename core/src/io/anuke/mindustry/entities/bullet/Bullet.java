@@ -16,11 +16,10 @@ import io.anuke.mindustry.entities.type.Unit;
 import io.anuke.mindustry.game.Team;
 import io.anuke.mindustry.world.Tile;
 
-import java.io.*;
+import static io.anuke.mindustry.Vars.bulletGroup;
+import static io.anuke.mindustry.Vars.world;
 
-import static io.anuke.mindustry.Vars.*;
-
-public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Poolable, DrawTrait, VelocityTrait, TimeTrait, TeamTrait, SyncTrait, AbsorbTrait{
+public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Poolable, DrawTrait, VelocityTrait, TimeTrait, TeamTrait, AbsorbTrait{
     public Interval timer = new Interval(3);
 
     private float lifeScl;
@@ -84,7 +83,7 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
     /** Internal use only. */
     @Remote(called = Loc.server, unreliable = true)
     public static void createBullet(BulletType type, float x, float y, float angle){
-        create(type, null, Team.none, x, y, angle);
+        create(type, null, Team.derelict, x, y, angle);
     }
 
     /** ok */
@@ -154,31 +153,6 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
     }
 
     @Override
-    public boolean isSyncing(){
-        return type.syncable;
-    }
-
-    @Override
-    public void write(DataOutput data) throws IOException{
-        data.writeFloat(x);
-        data.writeFloat(y);
-        data.writeFloat(velocity.x);
-        data.writeFloat(velocity.y);
-        data.writeByte(team.ordinal());
-        data.writeByte(type.id);
-    }
-
-    @Override
-    public void read(DataInput data) throws IOException{
-        x = data.readFloat();
-        y = data.readFloat();
-        velocity.x = data.readFloat();
-        velocity.y = data.readFloat();
-        team = Team.all[data.readByte()];
-        type = content.bullet(data.readByte());
-    }
-
-    @Override
     public Team getTeam(){
         return team;
     }
@@ -225,9 +199,8 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
         if(type.hitTiles && collidesTiles() && !supressCollision && initialized){
             world.raycastEach(world.toTile(lastPosition().x), world.toTile(lastPosition().y), world.toTile(x), world.toTile(y), (x, y) -> {
 
-                Tile tile = world.tile(x, y);
+                Tile tile = world.ltile(x, y);
                 if(tile == null) return false;
-                tile = tile.target();
 
                 if(tile.entity != null && tile.entity.collide(this) && type.collides(this, tile) && !tile.entity.isDead() && (type.collidesTeam || tile.getTeam() != team)){
                     if(tile.getTeam() != team){

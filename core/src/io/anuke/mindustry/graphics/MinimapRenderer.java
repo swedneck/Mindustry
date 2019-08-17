@@ -1,23 +1,21 @@
 package io.anuke.mindustry.graphics;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
-import io.anuke.arc.collection.Array;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.graphics.*;
-import io.anuke.arc.graphics.Pixmap.Format;
+import io.anuke.arc.graphics.Pixmap.*;
 import io.anuke.arc.graphics.g2d.*;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Rectangle;
-import io.anuke.arc.util.Disposable;
-import io.anuke.mindustry.entities.Units;
-import io.anuke.mindustry.entities.type.Unit;
-import io.anuke.mindustry.game.EventType.TileChangeEvent;
-import io.anuke.mindustry.game.EventType.WorldLoadEvent;
-import io.anuke.mindustry.io.MapIO;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.world.*;
 
-import static io.anuke.mindustry.Vars.tilesize;
-import static io.anuke.mindustry.Vars.world;
+import static io.anuke.mindustry.Vars.*;
 
 public class MinimapRenderer implements Disposable{
     private static final float baseSize = 16f;
@@ -25,7 +23,7 @@ public class MinimapRenderer implements Disposable{
     private Pixmap pixmap;
     private Texture texture;
     private TextureRegion region;
-    private Rectangle rect = new Rectangle(), scissor = new Rectangle();
+    private Rectangle rect = new Rectangle();
     private float zoom = 4;
 
     public MinimapRenderer(){
@@ -60,6 +58,7 @@ public class MinimapRenderer implements Disposable{
             pixmap.dispose();
             texture.dispose();
         }
+        setZoom(4f);
         pixmap = new Pixmap(world.width(), world.height(), Format.RGBA8888);
         texture = new Texture(pixmap);
         region = new TextureRegion(texture);
@@ -79,7 +78,7 @@ public class MinimapRenderer implements Disposable{
         for(Unit unit : units){
             float rx = (unit.x - rect.x) / rect.width * w, ry = (unit.y - rect.y) / rect.width * h;
             Draw.color(unit.getTeam().color);
-            Fill.rect(x + rx, y + ry, baseSize / 2f, baseSize / 2f);
+            Fill.rect(x + rx, y + ry, UnitScl.dp.scl(baseSize / 2f), UnitScl.dp.scl(baseSize / 2f));
         }
 
         Draw.color();
@@ -123,21 +122,23 @@ public class MinimapRenderer implements Disposable{
         dx = Mathf.clamp(dx, sz, world.width() - sz);
         dy = Mathf.clamp(dy, sz, world.height() - sz);
 
-        rect.set((dx - sz) * tilesize, (dy - sz) * tilesize, sz * 2 * tilesize, sz * 2 * tilesize);
         units.clear();
-        Units.getNearby(rect, units::add);
+        Units.nearby((dx - sz) * tilesize, (dy - sz) * tilesize, sz * 2 * tilesize, sz * 2 * tilesize, units::add);
     }
 
     private int colorFor(Tile tile){
-        tile = tile.target();
-        return MapIO.colorFor(tile.floor(), tile.block(), tile.overlay(), tile.getTeam());
+        if(tile == null) return 0;
+        tile = tile.link();
+        return Tmp.c1.set(MapIO.colorFor(tile.floor(), tile.block(), tile.overlay(), tile.getTeam())).mul(tile.block().cacheLayer == CacheLayer.walls ? 1f - tile.rotation() / 4f : 1f).rgba();
     }
 
     @Override
     public void dispose(){
-        pixmap.dispose();
-        texture.dispose();
-        texture = null;
-        pixmap = null;
+        if(pixmap != null && texture != null){
+            pixmap.dispose();
+            texture.dispose();
+            texture = null;
+            pixmap = null;
+        }
     }
 }

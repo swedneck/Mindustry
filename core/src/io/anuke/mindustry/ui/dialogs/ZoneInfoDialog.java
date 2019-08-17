@@ -1,19 +1,21 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.scene.ui.Button;
-import io.anuke.arc.scene.ui.TextButton;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.mindustry.graphics.Pal;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.type.Zone.ZoneRequirement;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Block.Icon;
+import io.anuke.mindustry.type.Zone.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.Block.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class ZoneInfoDialog extends FloatingDialog{
+    private LoadoutDialog loadout = new LoadoutDialog();
 
     public ZoneInfoDialog(){
         super("");
@@ -56,9 +58,9 @@ public class ZoneInfoDialog extends FloatingDialog{
 
         rebuildItems.run();
 
-        cont.table(cont -> {
+        cont.pane(cont -> {
             if(zone.locked()){
-                cont.addImage("icon-zone-locked");
+                cont.addImage("icon-locked");
                 cont.row();
                 cont.add("$locked").padBottom(6);
                 cont.row();
@@ -71,10 +73,9 @@ public class ZoneInfoDialog extends FloatingDialog{
                             r.add("$complete").colspan(2).left();
                             r.row();
                             for(ZoneRequirement other : zone.zoneRequirements){
-                                r.addImage("icon-zone").padRight(4);
+                                r.addImage("icon-terrain").padRight(4);
                                 r.add(Core.bundle.format("zone.requirement", other.wave, other.zone.localizedName())).color(Color.LIGHT_GRAY);
-                                r.addImage(other.zone.bestWave() >= other.wave ? "icon-check-2" : "icon-cancel-2")
-                                .color(other.zone.bestWave() >= other.wave ? Color.LIGHT_GRAY : Color.SCARLET).padLeft(3);
+                                r.addImage(other.zone.bestWave() >= other.wave ? "icon-check-small" : "icon-cancel-small", other.zone.bestWave() >= other.wave ? Color.LIGHT_GRAY : Color.SCARLET).padLeft(3);
                                 r.row();
                             }
                         });
@@ -89,8 +90,7 @@ public class ZoneInfoDialog extends FloatingDialog{
                             for(Block block : zone.blockRequirements){
                                 r.addImage(block.icon(Icon.small)).size(8 * 3).padRight(4);
                                 r.add(block.localizedName).color(Color.LIGHT_GRAY);
-                                r.addImage(data.isUnlocked(block) ? "icon-check-2" : "icon-cancel-2")
-                                .color(data.isUnlocked(block) ? Color.LIGHT_GRAY : Color.SCARLET).padLeft(3);
+                                r.addImage(data.isUnlocked(block) ? "icon-check-small" : "icon-cancel-small", data.isUnlocked(block) ? Color.LIGHT_GRAY : Color.SCARLET).padLeft(3);
                                 r.row();
                             }
 
@@ -101,96 +101,50 @@ public class ZoneInfoDialog extends FloatingDialog{
             }else{
                 cont.add(zone.localizedName()).color(Pal.accent).growX().center();
                 cont.row();
-                cont.addImage("white").color(Pal.accent).height(3).pad(6).growX();
+                cont.addImage("whiteui").color(Pal.accent).height(3).pad(6).growX();
                 cont.row();
-                cont.table(res -> {
-                    res.add("$zone.resources").padRight(6);
-                    if(zone.resources.length > 0){
-                        for(Item item : zone.resources){
-                            res.addImage(item.icon(Item.Icon.medium)).size(8 * 3);
+                cont.table(desc -> {
+                    desc.left().defaults().left().width(Core.graphics.isPortrait() ? 350f : 500f);
+                    desc.pane(t -> t.marginRight(12f).add(zone.description).wrap().growX()).fillX().maxHeight(mobile ? 300f : 450f).pad(2).padBottom(8f).get().setScrollingDisabled(true, false);
+                    desc.row();
+
+                    desc.table(t -> {
+                        t.left();
+                        t.add("$zone.resources").padRight(6);
+
+                        if(zone.resources.length > 0){
+                            for(Item item : zone.resources){
+                                t.addImage(item.icon(Item.Icon.medium)).size(8 * 3);
+                            }
+                        }else{
+                            t.add("$none");
                         }
-                    }else{
-                        res.add("$none");
+                    });
+
+                    Rules rules = zone.getRules();
+
+                    desc.row();
+                    desc.add(Core.bundle.format("zone.objective", Core.bundle.get(!rules.attackMode ? "zone.objective.survival" : "zone.objective.attack")));
+
+                    if(zone.bestWave() > 0){
+                        desc.row();
+                        desc.add(Core.bundle.format("bestwave", zone.bestWave()));
                     }
                 });
 
-                if(zone.bestWave() > 0){
-                    cont.row();
-                    cont.add(Core.bundle.format("bestwave", zone.bestWave()));
-                }
-
-                Table load = new Table();
-                //thanks java, absolutely brilliant syntax here
-                Runnable[] rebuildLoadout = {null};
-                rebuildLoadout[0] = () -> {
-                    load.clear();
-                    float bsize = 40f;
-                    int step = 50;
-
-                    load.left();
-                    for(ItemStack stack : zone.getStartingItems()){
-                        load.addButton("x", () -> {
-                            zone.getStartingItems().remove(stack);
-                            zone.updateLaunchCost();
-                            rebuildItems.run();
-                            rebuildLoadout[0].run();
-                        }).size(bsize).pad(2);
-
-                        load.addButton("-", () -> {
-                            stack.amount = Math.max(stack.amount - step, 0);
-                            zone.updateLaunchCost();
-                            rebuildItems.run();
-                        }).size(bsize).pad(2);
-                        load.addButton("+", () -> {
-                            stack.amount = Math.min(stack.amount + step, zone.loadout.core().itemCapacity);
-                            zone.updateLaunchCost();
-                            rebuildItems.run();
-                        }).size(bsize).pad(2);
-
-                        load.addImage(stack.item.icon(Item.Icon.medium)).size(8 * 3).padRight(4);
-                        load.label(() -> stack.amount + "").left();
-
-                        load.row();
-                    }
-
-                    load.addButton("$add", () -> {
-                        FloatingDialog dialog = new FloatingDialog("");
-                        dialog.setFillParent(false);
-                        for(Item item : content.items().select(item -> data.getItem(item) > 0 && item.type == ItemType.material && zone.getStartingItems().find(stack -> stack.item == item) == null)){
-                            TextButton button = dialog.cont.addButton("", () -> {
-                                zone.getStartingItems().add(new ItemStack(item, 0));
-                                zone.updateLaunchCost();
-                                rebuildLoadout[0].run();
-                                dialog.hide();
-                            }).size(300f, 35f).pad(1).get();
-                            button.clearChildren();
-                            button.left();
-                            button.addImage(item.icon(Item.Icon.medium)).size(8 * 3).pad(4);
-                            button.add(item.localizedName);
-                            dialog.cont.row();
-                        }
-                        dialog.show();
-                    }).colspan(4).size(100f, bsize).left().disabled(b -> !content.items().contains(item -> data.getItem(item) > 0 && item.type == ItemType.material && !zone.getStartingItems().contains(stack -> stack.item == item)));
-                };
-
-                rebuildLoadout[0].run();
-
                 cont.row();
-                cont.table(zone.canConfigure() ? "button" : "button-disabled", t -> {
-                    t.left();
-                    t.add(!zone.canConfigure() ? Core.bundle.format("configure.locked", zone.configureWave) : "$configure").growX().wrap();
-                    if(zone.canConfigure()){
-                        t.row();
-                        t.pane(load).pad(2).growX().left();
-                    }
-                }).width(300f).pad(4).left();
-            }
-        });
 
+                cont.addButton(zone.canConfigure() ? "$configure" : Core.bundle.format("configure.locked", zone.configureWave),
+                () -> loadout.show(zone.loadout.core().itemCapacity, zone::getStartingItems, zone::resetStartingItems, zone::updateLaunchCost, rebuildItems, item -> data.getItem(item) > 0 && item.type == ItemType.material)
+                ).fillX().pad(3).disabled(b -> !zone.canConfigure());
+            }
+            cont.marginRight(12f);
+        });
         cont.row();
 
         Button button = cont.addButton(zone.locked() ? "$uncover" : "$launch", () -> {
             if(!data.isUnlocked(zone)){
+                Sounds.unlock.play();
                 data.unlockContent(zone);
                 ui.deploy.setup();
                 setup(zone);
@@ -198,31 +152,11 @@ public class ZoneInfoDialog extends FloatingDialog{
                 ui.deploy.hide();
                 data.removeItems(zone.getLaunchCost());
                 hide();
-                world.playZone(zone);
+                control.playZone(zone);
             }
-        }).minWidth(150f).margin(13f).padTop(5).disabled(b -> zone.locked() ? !canUnlock(zone) : !data.hasItems(zone.getLaunchCost())).get();
+        }).minWidth(150f).margin(13f).padTop(5).disabled(b -> zone.locked() ? !zone.canUnlock() : !data.hasItems(zone.getLaunchCost())).uniformY().get();
 
         button.row();
         button.add(iteminfo);
-    }
-
-    private boolean canUnlock(Zone zone){
-        if(data.isUnlocked(zone)){
-            return true;
-        }
-
-        for(ZoneRequirement other : zone.zoneRequirements){
-            if(other.zone.bestWave() < other.wave){
-                return false;
-            }
-        }
-
-        for(Block other : zone.blockRequirements){
-            if(!data.isUnlocked(other)){
-                return false;
-            }
-        }
-
-        return true;
     }
 }

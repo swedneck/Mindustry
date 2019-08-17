@@ -2,6 +2,10 @@ package io.anuke.mindustry.game;
 
 import io.anuke.annotations.Annotations.Serialize;
 import io.anuke.arc.collection.Array;
+import io.anuke.mindustry.content.Items;
+import io.anuke.mindustry.io.JsonIO;
+import io.anuke.mindustry.type.ItemStack;
+import io.anuke.mindustry.type.Zone;
 
 /**
  * Defines current rules on how the game should function.
@@ -20,7 +24,7 @@ public class Rules{
     /** Whether the game objective is PvP. Note that this enables automatic hosting. */
     public boolean pvp;
     /** Whether enemy units drop random items on death. */
-    public boolean unitDrops;
+    public boolean unitDrops = true;
     /** How fast unit pads build units. */
     public float unitBuildSpeedMultiplier = 1f;
     /** How much health units start with. */
@@ -37,12 +41,37 @@ public class Rules{
     public float buildSpeedMultiplier = 1f;
     /** No-build zone around enemy core radius. */
     public float enemyCoreBuildRadius = 400f;
+    /** Radius around enemy wave drop zones.*/
+    public float dropZoneRadius = 300f;
     /** Player respawn time in ticks. */
     public float respawnTime = 60 * 4;
     /** Time between waves in ticks. */
     public float waveSpacing = 60 * 60 * 2;
-    /** Zone ID, -1 for invalid zone. */
-    public byte zone = -1;
-    /** Spawn layout. Since only zones modify this, it should be assigned on save load. */
-    public transient Array<SpawnGroup> spawns = DefaultWaves.get();
+    /** How many times longer a boss wave takes. */
+    public float bossWaveMultiplier = 3f;
+    /** How many times longer a launch wave takes. */
+    public float launchWaveMultiplier = 2f;
+    /** Zone for saves that have them.*/
+    public Zone zone;
+    /** Spawn layout. */
+    public Array<SpawnGroup> spawns = new Array<>();
+    /** Determines if there should be limited respawns. */
+    public boolean limitedRespawns = false;
+    /** How many times player can respawn during one wave. */
+    public int respawns = 5;
+    /** Hold wave timer until all enemies are destroyed. */
+    public boolean waitForWaveToEnd = false;
+    /** Determinates if gamemode is attack mode */
+    public boolean attackMode = false;
+    /** Whether this is the editor gamemode. */
+    public boolean editor = false;
+    /** Whether the tutorial is enabled. False by default.*/
+    public boolean tutorial = false;
+    /** Starting items put in cores */
+    public Array<ItemStack> loadout = Array.with(ItemStack.with(Items.copper, 100));
+
+    /** Copies this ruleset exactly. Not very efficient at all, do not use often. */
+    public Rules copy(){
+        return JsonIO.copy(this);
+    }
 }

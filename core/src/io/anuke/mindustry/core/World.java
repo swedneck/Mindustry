@@ -1,25 +1,25 @@
 package io.anuke.mindustry.core;
 
-import io.anuke.annotations.Annotations.Nullable;
+import io.anuke.annotations.Annotations.*;
 import io.anuke.arc.*;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.IntArray;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.math.geom.Point2;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
 import io.anuke.arc.util.*;
 import io.anuke.mindustry.ai.*;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.entities.EntityQuery;
-import io.anuke.mindustry.game.EventType.TileChangeEvent;
-import io.anuke.mindustry.game.EventType.WorldLoadEvent;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.io.MapIO;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.io.*;
 import io.anuke.mindustry.maps.*;
-import io.anuke.mindustry.maps.generators.Generator;
+import io.anuke.mindustry.maps.filters.*;
+import io.anuke.mindustry.maps.filters.GenerateFilter.*;
+import io.anuke.mindustry.maps.generators.*;
 import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -28,15 +28,20 @@ public class World implements ApplicationListener{
     public final BlockIndexer indexer = new BlockIndexer();
     public final WaveSpawner spawner = new WaveSpawner();
     public final Pathfinder pathfinder = new Pathfinder();
+    public final Context context = new Context();
 
     private Map currentMap;
     private Tile[][] tiles;
 
-    private Array<Tile> tempTiles = new Array<>();
     private boolean generating, invalidMap;
 
     public World(){
         maps.load();
+    }
+
+    @Override
+    public void init(){
+        maps.loadLegacyMaps();
     }
 
     @Override
@@ -85,13 +90,19 @@ public class World implements ApplicationListener{
         return tiles == null ? 0 : tiles[0].length;
     }
 
-    public @Nullable
-    Tile tile(int pos){
+    public int unitWidth(){
+        return width()*tilesize;
+    }
+
+    public int unitHeight(){
+        return height()*tilesize;
+    }
+
+    public @Nullable Tile tile(int pos){
         return tiles == null ? null : tile(Pos.x(pos), Pos.y(pos));
     }
 
-    public @Nullable
-    Tile tile(int x, int y){
+    public @Nullable Tile tile(int x, int y){
         if(tiles == null){
             return null;
         }
@@ -99,13 +110,22 @@ public class World implements ApplicationListener{
         return tiles[x][y];
     }
 
+    public @Nullable Tile ltile(int x, int y){
+        Tile tile = tile(x, y);
+        if(tile == null) return null;
+        return tile.block().linked(tile);
+    }
+
     public Tile rawTile(int x, int y){
         return tiles[x][y];
     }
 
-    public @Nullable
-    Tile tileWorld(float x, float y){
+    public @Nullable Tile tileWorld(float x, float y){
         return tile(Math.round(x / tilesize), Math.round(y / tilesize));
+    }
+
+    public @Nullable Tile ltileWorld(float x, float y){
+        return ltile(Math.round(x / tilesize), Math.round(y / tilesize));
     }
 
     public int toTile(float coord){
@@ -152,17 +172,13 @@ public class World implements ApplicationListener{
         generating = true;
     }
 
-    /** Call to signal the beginning of loading the map with a custom set of tiles. */
-    public void beginMapLoad(Tile[][] tiles){
-        this.tiles = tiles;
-        generating = true;
-    }
-
     /**
      * Call to signify the end of map loading. Updates tile occlusions and sets up physics for the world.
      * A WorldLoadEvent will be fire.
      */
     public void endMapLoad(){
+        prepareTiles(tiles);
+
         for(int x = 0; x < tiles.length; x++){
             for(int y = 0; y < tiles[0].length; y++){
                 Tile tile = tiles[x][y];
@@ -176,7 +192,7 @@ public class World implements ApplicationListener{
 
         addDarkness(tiles);
 
-        EntityQuery.resizeTree(-finalWorldBounds, -finalWorldBounds, tiles.length * tilesize + finalWorldBounds * 2, tiles[0].length * tilesize + finalWorldBounds * 2);
+        Entities.getAllGroups().each(group -> group.resize(-finalWorldBounds, -finalWorldBounds, tiles.length * tilesize + finalWorldBounds * 2, tiles[0].length * tilesize + finalWorldBounds * 2));
 
         generating = false;
         Events.fire(new WorldLoadEvent());
@@ -191,24 +207,7 @@ public class World implements ApplicationListener{
     }
 
     public Zone getZone(){
-        return content.getByID(ContentType.zone, state.rules.zone);
-    }
-
-    public void playZone(Zone zone){
-        ui.loadAnd(() -> {
-            logic.reset();
-            state.rules = zone.rules.get();
-            state.rules.zone = zone.id;
-            loadGenerator(zone.generator);
-            for(Tile core : state.teams.get(defaultTeam).cores){
-                for(ItemStack stack : zone.getStartingItems()){
-                    core.entity.items.add(stack.item, stack.amount);
-                }
-            }
-            state.set(State.playing);
-            control.saves.zoneSave();
-            logic.play();
-        });
+        return state.rules.zone;
     }
 
     public void loadGenerator(Generator generator){
@@ -216,24 +215,13 @@ public class World implements ApplicationListener{
 
         createTiles(generator.width, generator.height);
         generator.generate(tiles);
-        prepareTiles(tiles);
 
         endMapLoad();
     }
 
     public void loadMap(Map map){
-        beginMapLoad();
-        this.currentMap = map;
-
         try{
-            createTiles(map.width, map.height);
-            for(int x = 0; x < map.width; x++){
-                for(int y = 0; y < map.height; y++){
-                    tiles[x][y] = new Tile(x, y);
-                }
-            }
-            MapIO.readTiles(map, tiles);
-            prepareTiles(tiles);
+            SaveIO.load(map.file, new FilterContext(map));
         }catch(Exception e){
             Log.err(e);
             if(!headless){
@@ -245,25 +233,25 @@ public class World implements ApplicationListener{
             return;
         }
 
-        endMapLoad();
+        this.currentMap = map;
 
         invalidMap = false;
 
         if(!headless){
-            if(state.teams.get(player.getTeam()).cores.size == 0){
+            if(state.teams.get(defaultTeam).cores.size == 0){
                 ui.showError("$map.nospawn");
                 invalidMap = true;
             }else if(state.rules.pvp){ //pvp maps need two cores to be valid
                 invalidMap = true;
                 for(Team team : Team.all){
-                    if(state.teams.get(team).cores.size != 0 && team != player.getTeam()){
+                    if(state.teams.get(team).cores.size != 0 && team != defaultTeam){
                         invalidMap = false;
                     }
                 }
                 if(invalidMap){
                     ui.showError("$map.nospawn.pvp");
                 }
-            }else if(!state.rules.waves){ //pvp maps need two cores to be valid
+            }else if(state.rules.attackMode){ //pvp maps need two cores to be valid
                 invalidMap = state.teams.get(waveTeam).cores.isEmpty();
                 if(invalidMap){
                     ui.showError("$map.nospawn.attack");
@@ -292,16 +280,7 @@ public class World implements ApplicationListener{
     }
 
     public void removeBlock(Tile tile){
-        if(!tile.block().isMultiblock() && !tile.isLinked()){
-            tile.setBlock(Blocks.air);
-        }else{
-            Tile target = tile.target();
-            Array<Tile> removals = target.getLinkedTiles(tempTiles);
-            for(Tile toremove : removals){
-                //note that setting a new block automatically unlinks it
-                if(toremove != null) toremove.setBlock(Blocks.air);
-            }
-        }
+        tile.link().getLinkedTiles(other -> other.setBlock(Blocks.air));
     }
 
     public void setBlock(Tile tile, Block block, Team team){
@@ -321,66 +300,12 @@ public class World implements ApplicationListener{
                     if(!(worldx == tile.x && worldy == tile.y)){
                         Tile toplace = world.tile(worldx, worldy);
                         if(toplace != null){
-                            toplace.setLinked((byte)(dx + offsetx), (byte)(dy + offsety));
-                            toplace.setTeam(team);
+                            toplace.setBlock(BlockPart.get(dx + offsetx, dy + offsety), team);
                         }
                     }
                 }
             }
         }
-    }
-
-    public int transform(int packed, int oldWidth, int oldHeight, int newWidth, int shiftX, int shiftY){
-        int x = packed % oldWidth;
-        int y = packed / oldWidth;
-        if(!Structs.inBounds(x, y, oldWidth, oldHeight)) return -1;
-        x += shiftX;
-        y += shiftY;
-        return y * newWidth + x;
-    }
-
-    /**
-     * Raycast, but with world coordinates.
-     */
-    public Point2 raycastWorld(float x, float y, float x2, float y2){
-        return raycast(Math.round(x / tilesize), Math.round(y / tilesize),
-        Math.round(x2 / tilesize), Math.round(y2 / tilesize));
-    }
-
-    /**
-     * Input is in block coordinates, not world coordinates.
-     * @return null if no collisions found, block position otherwise.
-     */
-    public Point2 raycast(int x0f, int y0f, int x1, int y1){
-        int x0 = x0f;
-        int y0 = y0f;
-        int dx = Math.abs(x1 - x0);
-        int dy = Math.abs(y1 - y0);
-
-        int sx = x0 < x1 ? 1 : -1;
-        int sy = y0 < y1 ? 1 : -1;
-
-        int err = dx - dy;
-        int e2;
-        while(true){
-
-            if(!passable(x0, y0)){
-                return Tmp.g1.set(x0, y0);
-            }
-            if(x0 == x1 && y0 == y1) break;
-
-            e2 = 2 * err;
-            if(e2 > -dy){
-                err = err - dy;
-                x0 = x0 + sx;
-            }
-
-            if(e2 < dx){
-                err = err + dx;
-                y0 = y0 + sy;
-            }
-        }
-        return null;
     }
 
     public void raycastEachWorld(float x0, float y0, float x1, float y1, Raycaster cons){
@@ -414,11 +339,6 @@ public class World implements ApplicationListener{
                 y0 = y0 + sy;
             }
         }
-    }
-
-    /** Loads raw map tile data into a Tile[][] array, setting up multiblocks, cliffs and ores. */
-    void loadTileData(Tile[][] tiles){
-        prepareTiles(tiles);
     }
 
     public void addDarkness(Tile[][] tiles){
@@ -459,7 +379,7 @@ public class World implements ApplicationListener{
             for(int y = 0; y < tiles[0].length; y++){
                 Tile tile = tiles[x][y];
                 if(tile.block().solid && !tile.block().synthetic()){
-                    tiles[x][y].setRotation(dark[x][y]);
+                    tiles[x][y].rotation(dark[x][y]);
                 }
             }
         }
@@ -506,25 +426,87 @@ public class World implements ApplicationListener{
                     if(!(worldx == x && worldy == y)){
                         Tile toplace = world.tile(worldx, worldy);
                         if(toplace != null){
-                            toplace.setLinked((byte)(dx + offsetx), (byte)(dy + offsety));
-                            toplace.setTeam(team);
+                            toplace.setBlock(BlockPart.get(dx + offsetx, dy + offsety), team);
                         }
                     }
                 }
-            }
-        }
-
-        //update cliffs, occlusion data
-        for(int x = 0; x < tiles.length; x++){
-            for(int y = 0; y < tiles[0].length; y++){
-                Tile tile = tiles[x][y];
-
-                tile.updateOcclusion();
             }
         }
     }
 
     public interface Raycaster{
         boolean accept(int x, int y);
+    }
+
+    private class Context implements WorldContext{
+        @Override
+        public Tile tile(int x, int y){
+            return tiles[x][y];
+        }
+
+        @Override
+        public void resize(int width, int height){
+            createTiles(width, height);
+        }
+
+        @Override
+        public Tile create(int x, int y, int floorID, int overlayID, int wallID){
+            return (tiles[x][y] = new Tile(x, y, floorID, overlayID, wallID));
+        }
+
+        @Override
+        public boolean isGenerating(){
+            return World.this.isGenerating();
+        }
+
+        @Override
+        public void begin(){
+            beginMapLoad();
+        }
+
+        @Override
+        public void end(){
+            endMapLoad();
+        }
+    }
+
+    /** World context that applies filters after generation end. */
+    private class FilterContext extends Context{
+        final Map map;
+
+        FilterContext(Map map){
+            this.map = map;
+        }
+
+        @Override
+        public void end(){
+            Array<GenerateFilter> filters = map.filters();
+            if(!filters.isEmpty()){
+                //input for filter queries
+                GenerateInput input = new GenerateInput();
+
+                for(GenerateFilter filter : filters){
+                    input.begin(filter, width(), height(), (x, y) -> tiles[x][y]);
+
+                    //actually apply the filter
+                    for(int x = 0; x < width(); x++){
+                        for(int y = 0; y < height(); y++){
+                            Tile tile = rawTile(x, y);
+                            input.apply(x, y, tile.floor(), tile.block(), tile.overlay());
+                            filter.apply(input);
+
+                            tile.setFloor((Floor)input.floor);
+                            tile.setOverlay(input.ore);
+
+                            if(!tile.block().synthetic() && !input.block.synthetic()){
+                                tile.setBlock(input.block);
+                            }
+                        }
+                    }
+                }
+            }
+
+            super.end();
+        }
     }
 }

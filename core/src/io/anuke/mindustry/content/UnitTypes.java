@@ -1,24 +1,41 @@
 package io.anuke.mindustry.content;
 
-import io.anuke.arc.collection.ObjectSet;
+import io.anuke.arc.collection.*;
+import io.anuke.mindustry.entities.bullet.*;
+import io.anuke.mindustry.entities.type.*;
 import io.anuke.mindustry.entities.type.base.*;
-import io.anuke.mindustry.game.ContentList;
-import io.anuke.mindustry.type.UnitType;
-import io.anuke.mindustry.type.Weapon;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.type.*;
 
 public class UnitTypes implements ContentList{
     public static UnitType
-    spirit, phantom,
+    draug, spirit, phantom,
     wraith, ghoul, revenant, lich, reaper,
     dagger, crawler, titan, fortress, eruptor, chaosArray, eradicator;
 
     @Override
     public void load(){
+        draug = new UnitType("draug", Draug.class, Draug::new){{
+            isFlying = true;
+            drag = 0.01f;
+            speed = 0.3f;
+            maxVelocity = 1.2f;
+            range = 50f;
+            health = 60;
+            minePower = 0.5f;
+            engineSize = 1.8f;
+            engineOffset = 5.7f;
+            weapon = new Weapon("you have incurred my wrath. prepare to die."){{
+                bullet = Bullets.lancerLaser;
+            }};
+        }};
+
         spirit = new UnitType("spirit", Spirit.class, Spirit::new){{
             isFlying = true;
             drag = 0.01f;
-            speed = 0.2f;
-            maxVelocity = 0.8f;
+            speed = 0.4f;
+            maxVelocity = 1.6f;
             range = 50f;
             health = 60;
             engineSize = 1.8f;
@@ -26,6 +43,31 @@ public class UnitTypes implements ContentList{
             weapon = new Weapon("heal-blaster"){{
                 length = 1.5f;
                 reload = 40f;
+                width = 0.5f;
+                roundrobin = true;
+                ejectEffect = Fx.none;
+                recoil = 2f;
+                bullet = Bullets.healBullet;
+                shootSound = Sounds.pew;
+            }};
+        }};
+
+        phantom = new UnitType("phantom", Phantom.class, Phantom::new){{
+            isFlying = true;
+            drag = 0.01f;
+            mass = 2f;
+            speed = 0.45f;
+            maxVelocity = 1.9f;
+            range = 70f;
+            itemCapacity = 70;
+            health = 220;
+            buildPower = 0.9f;
+            minePower = 1.1f;
+            engineOffset = 6.5f;
+            toMine = ObjectSet.with(Items.lead, Items.copper, Items.titanium);
+            weapon = new Weapon("heal-blaster"){{
+                length = 1.5f;
+                reload = 20f;
                 width = 0.5f;
                 roundrobin = true;
                 ejectEffect = Fx.none;
@@ -51,31 +93,51 @@ public class UnitTypes implements ContentList{
         }};
 
         crawler = new UnitType("crawler", Crawler.class, Crawler::new){{
-            maxVelocity = 1.2f;
-            speed = 0.26f;
+            maxVelocity = 1.27f;
+            speed = 0.285f;
             drag = 0.4f;
             hitsize = 8f;
             mass = 1.75f;
-            health = 100;
+            health = 120;
             weapon = new Weapon("bomber"){{
                 reload = 12f;
                 ejectEffect = Fx.none;
-                bullet = Bullets.explode;
+                shootSound = Sounds.explosion;
+                bullet = new BombBulletType(2f, 3f, "clear"){
+                    {
+                        hitEffect = Fx.pulverize;
+                        lifetime = 30f;
+                        speed = 1.1f;
+                        splashDamageRadius = 55f;
+                        splashDamage = 30f;
+                    }
+
+                    @Override
+                    public void init(Bullet b){
+                        if(b.getOwner() instanceof Unit){
+                            ((Unit)b.getOwner()).kill();
+                        }
+                        b.time(b.lifetime());
+                    }
+                };
             }};
         }};
 
         titan = new UnitType("titan", Titan.class, Titan::new){{
             maxVelocity = 0.8f;
-            speed = 0.18f;
+            speed = 0.22f;
             drag = 0.4f;
             mass = 3.5f;
             hitsize = 9f;
+            range = 10f;
             rotatespeed = 0.1f;
-            health = 440;
+            health = 460;
             immunities.add(StatusEffects.burning);
             weapon = new Weapon("flamethrower"){{
+                shootSound = Sounds.flame;
                 length = 1f;
                 reload = 14f;
+                range = 30f;
                 roundrobin = true;
                 recoil = 1f;
                 ejectEffect = Fx.none;
@@ -101,6 +163,7 @@ public class UnitTypes implements ContentList{
                 shake = 2f;
                 ejectEffect = Fx.shellEjectMedium;
                 bullet = Bullets.artilleryUnit;
+                shootSound = Sounds.artillery;
             }};
         }};
 
@@ -122,6 +185,7 @@ public class UnitTypes implements ContentList{
                 bullet = Bullets.eruptorShot;
                 recoil = 1f;
                 width = 7f;
+                shootSound = Sounds.flame;
             }};
         }};
 
@@ -132,7 +196,7 @@ public class UnitTypes implements ContentList{
             mass = 5f;
             hitsize = 20f;
             rotatespeed = 0.06f;
-            health = 4000;
+            health = 3000;
             weapon = new Weapon("chaos"){{
                 length = 8f;
                 reload = 50f;
@@ -145,6 +209,7 @@ public class UnitTypes implements ContentList{
                 shotDelay = 5;
                 ejectEffect = Fx.shellEjectMedium;
                 bullet = Bullets.flakSurge;
+                shootSound = Sounds.shootBig;
             }};
         }};
 
@@ -155,7 +220,7 @@ public class UnitTypes implements ContentList{
             mass = 5f;
             hitsize = 20f;
             rotatespeed = 0.06f;
-            health = 10000;
+            health = 9000;
             weapon = new Weapon("eradication"){{
                 length = 13f;
                 reload = 30f;
@@ -169,6 +234,7 @@ public class UnitTypes implements ContentList{
                 shotDelay = 3;
                 ejectEffect = Fx.shellEjectMedium;
                 bullet = Bullets.standardThoriumBig;
+                shootSound = Sounds.shootBig;
             }};
         }};
 
@@ -187,6 +253,7 @@ public class UnitTypes implements ContentList{
                 roundrobin = true;
                 ejectEffect = Fx.shellEjectSmall;
                 bullet = Bullets.standardCopper;
+                shootSound = Sounds.shoot;
             }};
         }};
 
@@ -210,30 +277,7 @@ public class UnitTypes implements ContentList{
                 inaccuracy = 40f;
                 ignoreRotation = true;
                 bullet = Bullets.bombExplosive;
-            }};
-        }};
-
-        phantom = new UnitType("phantom", Phantom.class, Phantom::new){{
-            isFlying = true;
-            drag = 0.01f;
-            mass = 2f;
-            speed = 0.2f;
-            maxVelocity = 0.9f;
-            range = 70f;
-            itemCapacity = 70;
-            health = 220;
-            buildPower = 0.9f;
-            minePower = 1.1f;
-            engineOffset = 6.5f;
-            toMine = ObjectSet.with(Items.lead, Items.copper, Items.titanium);
-            weapon = new Weapon("heal-blaster"){{
-                length = 1.5f;
-                reload = 20f;
-                width = 0.5f;
-                roundrobin = true;
-                ejectEffect = Fx.none;
-                recoil = 2f;
-                bullet = Bullets.healBullet;
+                shootSound = Sounds.none;
             }};
         }};
 
@@ -263,12 +307,13 @@ public class UnitTypes implements ContentList{
                 ejectEffect = Fx.none;
                 velocityRnd = 0.2f;
                 spacing = 1f;
+                shootSound = Sounds.missile;
                 bullet = Bullets.missileRevenant;
             }};
         }};
 
         lich = new UnitType("lich", Revenant.class, Revenant::new){{
-            health = 7000;
+            health = 6000;
             mass = 20f;
             hitsize = 40f;
             speed = 0.01f;
@@ -285,9 +330,10 @@ public class UnitTypes implements ContentList{
             baseRotateSpeed = 0.04f;
             weapon = new Weapon("lich-missiles"){{
                 length = 4f;
-                reload = 180f;
+                reload = 160f;
                 width = 22f;
-                shots = 22;
+                shots = 16;
+                shootCone = 100f;
                 shotDelay = 2;
                 inaccuracy = 10f;
                 roundrobin = true;
@@ -295,11 +341,12 @@ public class UnitTypes implements ContentList{
                 velocityRnd = 0.2f;
                 spacing = 1f;
                 bullet = Bullets.missileRevenant;
+                shootSound = Sounds.artillery;
             }};
         }};
 
         reaper = new UnitType("reaper", Revenant.class, Revenant::new){{
-            health = 13000;
+            health = 11000;
             mass = 30f;
             hitsize = 56f;
             speed = 0.01f;
@@ -318,12 +365,25 @@ public class UnitTypes implements ContentList{
                 reload = 10f;
                 width = 32f;
                 shots = 1;
+                shootCone = 100f;
 
                 shake = 1f;
                 inaccuracy = 3f;
                 roundrobin = true;
                 ejectEffect = Fx.none;
-                bullet = Bullets.standardDenseBig;
+                bullet = new BasicBulletType(7f, 42, "bullet"){
+                    {
+                        bulletWidth = 15f;
+                        bulletHeight = 21f;
+                        shootEffect = Fx.shootBig;
+                    }
+
+                    @Override
+                    public float range(){
+                        return 165f;
+                    }
+                };
+                shootSound = Sounds.shootBig;
             }};
         }};
     }

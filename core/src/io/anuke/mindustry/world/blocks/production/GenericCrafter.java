@@ -1,27 +1,22 @@
 package io.anuke.mindustry.world.blocks.production;
 
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.function.Supplier;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Effects.Effect;
-import io.anuke.mindustry.entities.type.TileEntity;
+import io.anuke.arc.function.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.Effects.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.consumers.ConsumeLiquidBase;
-import io.anuke.mindustry.world.consumers.ConsumeType;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.consumers.*;
+import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
 
 public class GenericCrafter extends Block{
-    protected final int timerDump = timers++;
-
     protected ItemStack outputItem;
     protected LiquidStack outputLiquid;
 
@@ -39,6 +34,8 @@ public class GenericCrafter extends Block{
         solid = true;
         hasItems = true;
         health = 60;
+        idleSound = Sounds.machine;
+        idleSoundVolume = 0.03f;
     }
 
     @Override
@@ -58,6 +55,17 @@ public class GenericCrafter extends Block{
         if(outputLiquid != null){
             stats.add(BlockStat.output, outputLiquid.liquid, outputLiquid.amount, false);
         }
+    }
+
+    @Override
+    public boolean shouldIdleSound(Tile tile){
+        return tile.entity.cons.valid();
+    }
+
+    @Override
+    public void init(){
+        outputsLiquid = outputLiquid != null;
+        super.init();
     }
 
     @Override
@@ -110,7 +118,7 @@ public class GenericCrafter extends Block{
             entity.progress = 0f;
         }
 
-        if(outputItem != null && tile.entity.timer.get(timerDump, 5)){
+        if(outputItem != null && tile.entity.timer.get(timerDump, dumpTime)){
             tryDump(tile, outputItem.item);
         }
 
@@ -137,6 +145,14 @@ public class GenericCrafter extends Block{
         return itemCapacity;
     }
 
+    public Item outputItem(){
+        return outputItem == null ? null : outputItem.item;
+    }
+
+    public Liquid outputLiquid(){
+        return outputLiquid == null ? null : outputLiquid.liquid;
+    }
+
     public static class GenericCrafterEntity extends TileEntity{
         public float progress;
         public float totalProgress;
@@ -144,12 +160,14 @@ public class GenericCrafter extends Block{
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeFloat(progress);
             stream.writeFloat(warmup);
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             progress = stream.readFloat();
             warmup = stream.readFloat();
         }

@@ -9,7 +9,6 @@ import io.anuke.arc.scene.style.Drawable;
 import io.anuke.arc.scene.ui.*;
 import io.anuke.arc.scene.ui.layout.Cell;
 import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.scene.utils.UIUtils;
 import io.anuke.arc.util.Strings;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.Vars;
@@ -83,6 +82,8 @@ public class JoinDialog extends FloatingDialog{
             setup();
             refreshLocal();
             refreshRemote();
+
+            Core.app.post(() -> Core.settings.getBoolOnce("joininfo", () -> ui.showInfo("$join.info")));
         });
 
         onResize(this::setup);
@@ -98,7 +99,7 @@ public class JoinDialog extends FloatingDialog{
                 if(!buttons[0].childrenPressed()){
                     connect(server.ip, server.port);
                 }
-            }).width(targetWidth()).height(155f).pad(4f).get();
+            }).width(targetWidth()).height(130f).pad(4f).get();
 
             button.getLabel().setWrap(true);
 
@@ -108,16 +109,35 @@ public class JoinDialog extends FloatingDialog{
 
             inner.add(button.getLabel()).growX();
 
-            inner.addImageButton("icon-loading", "empty", 16 * 2, () -> {
+            inner.addImageButton("icon-arrow-up-small", "empty", iconsizesmall, () -> {
+                int index = servers.indexOf(server);
+                if(index > 0){
+                    servers.remove(index);
+                    servers.insert(0, server);
+
+                    saveServers();
+                    setupRemote();
+                    for(Server other : servers){
+                        if(other.lastHost != null){
+                            setupServer(other, other.lastHost);
+                        }else{
+                            refreshServer(other);
+                        }
+                    }
+                }
+
+            }).margin(3f).padTop(6f).top().right();
+
+            inner.addImageButton("icon-loading-small", "empty", iconsizesmall, () -> {
                 refreshServer(server);
             }).margin(3f).padTop(6f).top().right();
 
-            inner.addImageButton("icon-pencil", "empty", 16 * 2, () -> {
+            inner.addImageButton("icon-pencil-small", "empty", iconsizesmall, () -> {
                 renaming = server;
                 add.show();
             }).margin(3f).padTop(6f).top().right();
 
-            inner.addImageButton("icon-trash-16", "empty", 16 * 2, () -> {
+            inner.addImageButton("icon-trash-16-small", "empty", iconsizesmall, () -> {
                 ui.showConfirm("$confirm", "$server.delete", () -> {
                     servers.removeValue(server, true);
                     saveServers();
@@ -145,40 +165,39 @@ public class JoinDialog extends FloatingDialog{
         server.content.clear();
         server.content.label(() -> Core.bundle.get("server.refreshing") + Strings.animated(Time.time(), 4, 11, "."));
 
-        Net.pingHost(server.ip, server.port, host -> {
-            String versionString;
-
-            if(host.version == -1){
-                versionString = Core.bundle.format("server.version", Core.bundle.get("server.custombuild"), "");
-            }else if(host.version == 0){
-                versionString = Core.bundle.get("server.outdated");
-            }else if(host.version < Version.build && Version.build != -1){
-                versionString = Core.bundle.get("server.outdated") + "\n" +
-                Core.bundle.format("server.version", host.version, "");
-            }else if(host.version > Version.build && Version.build != -1){
-                versionString = Core.bundle.get("server.outdated.client") + "\n" +
-                Core.bundle.format("server.version", host.version, "");
-            }else{
-                versionString = Core.bundle.format("server.version", host.version, host.versionType);
-            }
-
-            server.content.clear();
-
-            server.content.table(t -> {
-                t.add(versionString).left();
-                t.row();
-                t.add("[lightgray]" + Core.bundle.format("server.hostname", host.name)).width(targetWidth() - 10f).left().get().setEllipsis(true);
-                t.row();
-                t.add("[lightgray]" + (host.players != 1 ? Core.bundle.format("players", host.players) :
-                Core.bundle.format("players.single", host.players))).left();
-                t.row();
-                t.add("[lightgray]" + Core.bundle.format("save.map", host.mapname) + " / " + Core.bundle.format("save.wave", host.wave)).width(targetWidth() - 10f).left().get().setEllipsis(true);
-            }).expand().left().bottom().padLeft(12f).padBottom(8);
-
-        }, e -> {
+        Net.pingHost(server.ip, server.port, host -> setupServer(server, host), e -> {
             server.content.clear();
             server.content.add("$host.invalid");
         });
+    }
+
+    void setupServer(Server server, Host host){
+        server.lastHost = host;
+        String versionString;
+
+        if(host.version == -1){
+            versionString = Core.bundle.format("server.version", Core.bundle.get("server.custombuild"), "");
+        }else if(host.version == 0){
+            versionString = Core.bundle.get("server.outdated");
+        }else if(host.version < Version.build && Version.build != -1){
+            versionString = Core.bundle.get("server.outdated") + "\n" +
+            Core.bundle.format("server.version", host.version, "");
+        }else if(host.version > Version.build && Version.build != -1){
+            versionString = Core.bundle.get("server.outdated.client") + "\n" +
+            Core.bundle.format("server.version", host.version, "");
+        }else{
+            versionString = Core.bundle.format("server.version", host.version, host.versionType);
+        }
+
+        server.content.clear();
+
+        server.content.table(t -> {
+            t.add("[lightgray]" + host.name + "   " + versionString).width(targetWidth() - 10f).left().get().setEllipsis(true);
+            t.row();
+            t.add("[lightgray]" + (host.players != 1 ? Core.bundle.format("players", host.players == 0 ? host.players : "[accent]" + host.players + "[lightgray]") : Core.bundle.format("players.single", "[accent]" + host.players + "[lightgray]"))).left();
+            t.row();
+            t.add("[lightgray]" + Core.bundle.format("save.map", host.mapname) + "[lightgray] / " + Core.bundle.format("save.wave", host.wave)).width(targetWidth() - 10f).left().get().setEllipsis(true);
+        }).expand().left().bottom().padLeft(12f).padBottom(8);
     }
 
     void setup(){
@@ -206,7 +225,7 @@ public class JoinDialog extends FloatingDialog{
                 Core.settings.save();
             }).grow().pad(8).get().setMaxLength(maxNameLength);
 
-            ImageButton button = t.addImageButton("white", "clear-full", 40, () -> {
+            ImageButton button = t.addImageButton("whiteui", "clear-full", 40, () -> {
                 new ColorPickDialog().show(color -> {
                     player.color.set(color);
                     Core.settings.put("color-0", Color.rgba8888(color));
@@ -218,7 +237,7 @@ public class JoinDialog extends FloatingDialog{
         cont.row();
         cont.add(pane).width(w + 38).pad(0);
         cont.row();
-        cont.addCenteredImageTextButton("$server.add", "icon-add", 14 * 3, () -> {
+        cont.addCenteredImageTextButton("$server.add", "icon-add", iconsize, () -> {
             renaming = null;
             add.show();
         }).marginLeft(6).width(w).height(80f).update(button -> {
@@ -231,7 +250,7 @@ public class JoinDialog extends FloatingDialog{
 
             Cell cell = ((Table)pane.getParent()).getCell(button);
 
-            if(!Mathf.isEqual(cell.getMinWidth(), pw)){
+            if(!Mathf.isEqual(cell.minWidth(), pw)){
                 cell.width(pw);
                 cell.padLeft(pad);
                 pane.getParent().invalidateHierarchy();
@@ -254,7 +273,7 @@ public class JoinDialog extends FloatingDialog{
             local.background("button");
             local.add("$hosts.none").pad(10f);
             local.add().growX();
-            local.addImageButton("icon-loading", 16 * 2f, this::refreshLocal).pad(-12f).padLeft(0).size(70f);
+            local.addImageButton("icon-loading", iconsize, this::refreshLocal).pad(-12f).padLeft(0).size(70f);
         }else{
             local.background((Drawable)null);
         }
@@ -292,6 +311,8 @@ public class JoinDialog extends FloatingDialog{
         });
 
         Time.runTask(2f, () -> {
+            logic.reset();
+            Net.reset();
             Vars.netClient.beginConnecting();
             Net.connect(ip, port, () -> {
                 hide();
@@ -301,7 +322,7 @@ public class JoinDialog extends FloatingDialog{
     }
 
     float targetWidth(){
-        return UIUtils.portrait() ? 350f : 500f;
+        return Core.graphics.isPortrait() ? 350f : 500f;
     }
 
     @SuppressWarnings("unchecked")
@@ -320,6 +341,7 @@ public class JoinDialog extends FloatingDialog{
         public int port;
 
         transient Table content;
+        transient Host lastHost;
 
         void setIP(String ip){
 

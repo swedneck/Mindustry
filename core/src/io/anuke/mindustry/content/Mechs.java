@@ -1,43 +1,38 @@
 package io.anuke.mindustry.content;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.Blending;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Rectangle;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Units;
-import io.anuke.mindustry.entities.effect.Lightning;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.game.ContentList;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.graphics.Shaders;
-import io.anuke.mindustry.type.Mech;
-import io.anuke.mindustry.type.Weapon;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.bullet.*;
+import io.anuke.mindustry.entities.effect.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.type.*;
 
 public class Mechs implements ContentList{
     public static Mech alpha, delta, tau, omega, dart, javelin, trident, glaive;
 
-    /** These are not new mechs, just re-assignments for convenience. */
-    public static Mech starterDesktop, starterMobile;
+    public static Mech starter;
 
     @Override
     public void load(){
 
         alpha = new Mech("alpha-mech", false){
-
             {
                 drillPower = 1;
                 mineSpeed = 1.5f;
                 mass = 1.2f;
                 speed = 0.5f;
-                boostSpeed = 0.85f;
+                itemCapacity = 40;
+                boostSpeed = 0.95f;
                 buildPower = 1.2f;
                 engineColor = Color.valueOf("ffd37f");
-                health = 300f;
+                health = 250f;
 
                 weapon = new Weapon("blaster"){{
                     length = 1.5f;
@@ -50,13 +45,9 @@ public class Mechs implements ContentList{
 
             @Override
             public void updateAlt(Player player){
-                player.healBy(Time.delta() * 0.1f);
+                player.healBy(Time.delta() * 0.09f);
             }
 
-            @Override
-            public boolean alwaysUnlocked(){
-                return true;
-            }
         };
 
         delta = new Mech("delta-mech", false){
@@ -68,7 +59,7 @@ public class Mechs implements ContentList{
                 boostSpeed = 0.95f;
                 itemCapacity = 15;
                 mass = 0.9f;
-                health = 250f;
+                health = 150f;
                 buildPower = 0.9f;
                 weaponOffsetX = -1;
                 weaponOffsetY = -1;
@@ -77,13 +68,14 @@ public class Mechs implements ContentList{
                 weapon = new Weapon("shockgun"){{
                     shake = 2f;
                     length = 1f;
-                    reload = 40f;
+                    reload = 55f;
                     shotDelay = 3f;
                     roundrobin = true;
                     shots = 2;
                     inaccuracy = 0f;
                     ejectEffect = Fx.none;
                     bullet = Bullets.lightning;
+                    shootSound = Sounds.spark;
                 }};
             }
 
@@ -103,7 +95,6 @@ public class Mechs implements ContentList{
             float healRange = 60f;
             float healAmount = 10f;
             float healReload = 160f;
-            Rectangle rect = new Rectangle();
             boolean wasHealed;
 
             {
@@ -128,6 +119,7 @@ public class Mechs implements ContentList{
                     ejectEffect = Fx.none;
                     recoil = 2f;
                     bullet = Bullets.healBullet;
+                    shootSound = Sounds.pew;
                 }};
             }
 
@@ -137,15 +129,12 @@ public class Mechs implements ContentList{
                 if(player.timer.get(Player.timerAbility, healReload)){
                     wasHealed = false;
 
-                    rect.setSize(healRange * 2f).setCenter(player.x, player.y);
-                    Units.getNearby(player.getTeam(), rect, unit -> {
-                        if(unit.dst(player) <= healRange){
-                            if(unit.health < unit.maxHealth()){
-                                Effects.effect(Fx.heal, unit);
-                                wasHealed = true;
-                            }
-                            unit.healBy(healAmount);
+                    Units.nearby(player.getTeam(), player.x, player.y, healRange, unit -> {
+                        if(unit.health < unit.maxHealth()){
+                            Effects.effect(Fx.heal, unit);
+                            wasHealed = true;
                         }
+                        unit.healBy(healAmount);
                     });
 
                     if(wasHealed){
@@ -161,7 +150,7 @@ public class Mechs implements ContentList{
             {
                 drillPower = 2;
                 mineSpeed = 1.5f;
-                itemCapacity = 50;
+                itemCapacity = 80;
                 speed = 0.36f;
                 boostSpeed = 0.6f;
                 mass = 4f;
@@ -169,12 +158,12 @@ public class Mechs implements ContentList{
                 weaponOffsetX = 1;
                 weaponOffsetY = 0;
                 engineColor = Color.valueOf("feb380");
-                health = 300f;
+                health = 350f;
                 buildPower = 1.5f;
                 weapon = new Weapon("swarmer"){{
                     length = 1.5f;
                     recoil = 4f;
-                    reload = 60f;
+                    reload = 38f;
                     shots = 4;
                     spacing = 8f;
                     inaccuracy = 8f;
@@ -182,6 +171,7 @@ public class Mechs implements ContentList{
                     ejectEffect = Fx.none;
                     shake = 3f;
                     bullet = Bullets.missileSwarm;
+                    shootSound = Sounds.shootBig;
                 }};
             }
 
@@ -230,9 +220,9 @@ public class Mechs implements ContentList{
             {
                 drillPower = 1;
                 mineSpeed = 0.9f;
-                speed = 0.4f;
-                drag = 0.1f;
-                health = 180f;
+                speed = 0.5f;
+                drag = 0.09f;
+                health = 200f;
                 weaponOffsetX = -1;
                 weaponOffsetY = -1;
                 engineColor = Pal.lightTrail;
@@ -240,7 +230,7 @@ public class Mechs implements ContentList{
                 buildPower = 1.1f;
                 weapon = new Weapon("blaster"){{
                     length = 1.5f;
-                    reload = 20f;
+                    reload = 15f;
                     roundrobin = true;
                     ejectEffect = Fx.shellEjectSmall;
                     bullet = Bullets.standardCopper;
@@ -276,6 +266,7 @@ public class Mechs implements ContentList{
                     velocityRnd = 0.2f;
                     spacing = 1f;
                     bullet = Bullets.missileJavelin;
+                    shootSound = Sounds.missile;
                 }};
             }
 
@@ -319,26 +310,35 @@ public class Mechs implements ContentList{
         trident = new Mech("trident-ship", true){
             {
                 drillPower = 2;
-                speed = 0.14f;
+                speed = 0.15f;
                 drag = 0.034f;
                 mass = 2.5f;
                 turnCursor = false;
-                health = 220f;
+                health = 250f;
                 itemCapacity = 30;
                 engineColor = Color.valueOf("84f491");
                 cellTrnsY = 1f;
-                buildPower = 2f;
+                buildPower = 2.5f;
                 weapon = new Weapon("bomber"){{
                     length = 0f;
                     width = 2f;
-                    reload = 8f;
+                    reload = 25f;
                     shots = 2;
+                    shotDelay = 1f;
+                    shots = 8;
                     roundrobin = true;
                     ejectEffect = Fx.none;
                     velocityRnd = 1f;
-                    inaccuracy = 40f;
+                    inaccuracy = 20f;
                     ignoreRotation = true;
-                    bullet = Bullets.bombExplosive;
+                    bullet = new BombBulletType(16f, 25f, "shell"){{
+                        bulletWidth = 10f;
+                        bulletHeight = 14f;
+                        hitEffect = Fx.flakExplosion;
+                        shootEffect = Fx.none;
+                        smokeEffect = Fx.none;
+                        shootSound = Sounds.artillery;
+                    }};
                 }};
             }
 
@@ -367,11 +367,11 @@ public class Mechs implements ContentList{
                     roundrobin = true;
                     ejectEffect = Fx.shellEjectSmall;
                     bullet = Bullets.standardGlaive;
+                    shootSound = Sounds.shootSnap;
                 }};
             }
         };
 
-        starterDesktop = alpha;
-        starterMobile = dart;
+        starter = dart;
     }
 }

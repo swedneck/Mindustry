@@ -1,34 +1,28 @@
 package io.anuke.mindustry.input;
 
-import io.anuke.annotations.Annotations.Loc;
-import io.anuke.annotations.Annotations.Remote;
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.input.InputProcessor;
-import io.anuke.arc.math.Angles;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Point2;
-import io.anuke.arc.math.geom.Vector2;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.Tmp;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.effect.ItemTransfer;
-import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.gen.Call;
-import io.anuke.mindustry.graphics.Pal;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.function.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.effect.*;
+import io.anuke.mindustry.entities.traits.BuilderTrait.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
 import io.anuke.mindustry.net.Net;
-import io.anuke.mindustry.net.ValidateException;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.type.ItemStack;
-import io.anuke.mindustry.ui.fragments.OverlayFragment;
+import io.anuke.mindustry.net.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.ui.fragments.*;
 import io.anuke.mindustry.world.*;
 
 import static io.anuke.mindustry.Vars.*;
@@ -42,7 +36,7 @@ public abstract class InputHandler implements InputProcessor{
     /** Distance on the back from where items originate. */
     final static float backTrns = 3f;
 
-    public final OverlayFragment frag = new OverlayFragment(this);
+    public final OverlayFragment frag = new OverlayFragment();
 
     public Block block;
     public int rotation;
@@ -82,6 +76,8 @@ public abstract class InputHandler implements InputProcessor{
         int removed = accepted / sent;
         int[] remaining = {accepted, accepted};
         Block block = tile.block();
+
+        Events.fire(new DepositEvent());
 
         for(int i = 0; i < sent; i++){
             boolean end = i == sent - 1;
@@ -154,7 +150,7 @@ public abstract class InputHandler implements InputProcessor{
 
     /** Handles tile tap events that are not platform specific. */
     boolean tileTapped(Tile tile){
-        tile = tile.target();
+        tile = tile.link();
 
         boolean consumed = false, showedInventory = false;
 
@@ -164,6 +160,7 @@ public abstract class InputHandler implements InputProcessor{
             if(((!frag.config.isShown() && tile.block().shouldShowConfigure(tile, player)) //if the config fragment is hidden, show
             //alternatively, the current selected block can 'agree' to switch config tiles
             || (frag.config.isShown() && frag.config.getSelectedTile().block().onConfigureTileTapped(frag.config.getSelectedTile(), tile)))){
+                Sounds.click.at(tile);
                 frag.config.showConfig(tile);
             }
             //otherwise...
@@ -195,14 +192,15 @@ public abstract class InputHandler implements InputProcessor{
             }
         }
 
-        if(!showedInventory){
-            frag.inv.hide();
-        }
-
-        if(!consumed && player.isBuilding()){
+        //clear when the player taps on something else
+        if(!consumed && !mobile && player.isBuilding() && block == null){
             player.clearBuilding();
             block = null;
             return true;
+        }
+
+        if(!showedInventory){
+            frag.inv.hide();
         }
 
         return consumed;
@@ -323,7 +321,7 @@ public abstract class InputHandler implements InputProcessor{
     }
 
     public boolean validBreak(int x, int y){
-        return Build.validBreak(player.getTeam(), x, y) && Mathf.dst(player.x, player.y, x * tilesize, y * tilesize) < Player.placeDistance;
+        return Build.validBreak(player.getTeam(), x, y);
     }
 
     public void placeBlock(int x, int y, Block block, int rotation){
@@ -331,7 +329,7 @@ public abstract class InputHandler implements InputProcessor{
     }
 
     public void breakBlock(int x, int y){
-        Tile tile = world.tile(x, y).target();
+        Tile tile = world.ltile(x, y);
         player.addBuildRequest(new BuildRequest(tile.x, tile.y));
     }
 

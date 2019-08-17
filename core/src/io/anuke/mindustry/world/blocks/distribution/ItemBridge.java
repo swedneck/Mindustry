@@ -113,7 +113,8 @@ public class ItemBridge extends Block{
             float w = (link.x == x ? tilesize : Math.abs(link.x - x) * tilesize - tilesize);
             float h = (link.y == y ? tilesize : Math.abs(link.y - y) * tilesize - tilesize);
             Lines.rect((x + link.x) / 2f * tilesize - w / 2f, (y + link.y) / 2f * tilesize - h / 2f, w, h);
-            Fill.poly(link.x * tilesize + Geometry.d4[rot].x * tilesize, link.y * tilesize + Geometry.d4[rot].y * tilesize, 3, 2.8f, link.absoluteRelativeTo(x, y) * 90);
+
+            Draw.rect("bridge-arrow", link.x * tilesize + Geometry.d4[rot].x * tilesize, link.y * tilesize + Geometry.d4[rot].y * tilesize, link.absoluteRelativeTo(x, y) * 90);
         }
         Draw.reset();
     }
@@ -252,7 +253,7 @@ public class ItemBridge extends Block{
 
     @Override
     public boolean acceptItem(Item item, Tile tile, Tile source){
-        if(tile.getTeam() != source.target().getTeam()) return false;
+        if(tile.getTeam() != source.getTeam()) return false;
 
         ItemBridgeEntity entity = tile.entity();
         Tile other = world.tile(entity.link);
@@ -327,6 +328,7 @@ public class ItemBridge extends Block{
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeInt(link);
             stream.writeFloat(uptime);
             stream.writeByte(incoming.size);
@@ -339,7 +341,8 @@ public class ItemBridge extends Block{
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             link = stream.readInt();
             uptime = stream.readFloat();
             byte links = stream.readByte();

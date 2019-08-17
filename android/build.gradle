@@ -8,7 +8,7 @@ buildscript{
     }
 
     dependencies{
-        classpath 'com.android.tools.build:gradle:3.3.2'
+        classpath 'com.android.tools.build:gradle:3.4.2'
     }
 }
 
@@ -46,7 +46,7 @@ task deploy(type: Copy){
 
     from "build/outputs/apk/release/android-release.apk"
     into "../deploy/"
-    rename("android-release.apk", appName + "-android-" + getVersionString() + ".apk")
+    rename("android-release.apk", "${generateDeployName('android')}.apk")
 }
 
 android{
@@ -113,9 +113,11 @@ android{
         }
     }
 
-    buildTypes{
-        release{
-            signingConfig signingConfigs.release
+    if(project.hasProperty("RELEASE_STORE_FILE")) {
+        buildTypes {
+            release {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
@@ -166,27 +168,4 @@ task run(type: Exec){
 
     def adb = path + "/platform-tools/adb"
     commandLine "$adb", 'shell', 'am', 'start', '-n', 'io.anuke.mindustry/io.anuke.mindustry.AndroidLauncher'
-}
-
-// sets up the Android Idea project, using the old Ant based build.
-idea{
-    module{
-        sourceDirs += file("src")
-        scopes = [COMPILE: [plus: [project.configurations.compile]]]
-
-        iml{
-            withXml{
-                def node = it.asNode()
-                def builder = NodeBuilder.newInstance()
-                builder.current = node
-                builder.component(name: "FacetManager"){
-                    facet(type: "android", name: "Android"){
-                        configuration{
-                            option(name: "UPDATE_PROPERTY_FILES", value: "true")
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

@@ -1,33 +1,28 @@
 package io.anuke.mindustry.ui.dialogs;
 
 import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.ObjectSet;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.scene.ui.ScrollPane;
-import io.anuke.arc.scene.ui.layout.Cell;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.scene.utils.UIUtils;
+import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
 import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.io.Contributors;
-import io.anuke.mindustry.io.Contributors.Contributor;
 import io.anuke.mindustry.ui.Links;
 import io.anuke.mindustry.ui.Links.LinkEntry;
 
-import static io.anuke.mindustry.Vars.ios;
-import static io.anuke.mindustry.Vars.ui;
+import static io.anuke.mindustry.Vars.*;
 
 public class AboutDialog extends FloatingDialog{
-    private Array<Contributor> contributors = new Array<>();
+    private Array<String> contributors = new Array<>();
     private static ObjectSet<String> bannedItems = ObjectSet.with("google-play", "itch.io", "dev-builds", "trello");
 
     public AboutDialog(){
         super("$about.button");
 
-        if(!ios){
-            Contributors.getContributors(out -> contributors = out, Throwable::printStackTrace);
-        }
+        shown(() -> {
+            contributors = Array.with(Core.files.internal("contributors").readString("UTF-8").split("\n"));
+            Core.app.post(this::setup);
+        });
 
         shown(this::setup);
         onResize(this::setup);
@@ -37,8 +32,8 @@ public class AboutDialog extends FloatingDialog{
         cont.clear();
         buttons.clear();
 
-        float h = UIUtils.portrait() ? 90f : 80f;
-        float w = UIUtils.portrait() ? 330f : 600f;
+        float h = Core.graphics.isPortrait() ? 90f : 80f;
+        float w = Core.graphics.isPortrait() ? 330f : 600f;
 
         Table in = new Table();
         ScrollPane pane = new ScrollPane(in);
@@ -51,14 +46,14 @@ public class AboutDialog extends FloatingDialog{
             Table table = new Table("underline");
             table.margin(0);
             table.table(img -> {
-                img.addImage("white").height(h - 5).width(40f).color(link.color);
+                img.addImage("whiteui").height(h - 5).width(40f).color(link.color);
                 img.row();
-                img.addImage("white").height(5).width(40f).color(link.color.cpy().mul(0.8f, 0.8f, 0.8f, 1f));
+                img.addImage("whiteui").height(5).width(40f).color(link.color.cpy().mul(0.8f, 0.8f, 0.8f, 1f));
             }).expandY();
 
             table.table(i -> {
                 i.background("button-edge-3");
-                i.addImage("icon-" + link.name).size(14 * 3f);
+                i.addImage("icon-" + link.name).size(iconsize);
             }).size(h - 5, h);
 
             table.table(inset -> {
@@ -67,10 +62,10 @@ public class AboutDialog extends FloatingDialog{
                 inset.labelWrap(link.description).width(w - 100f).color(Color.LIGHT_GRAY).growX();
             }).padLeft(8);
 
-            table.addImageButton("icon-link", 14 * 3, () -> {
+            table.addImageButton("icon-link", iconsize, () -> {
                 if(!Core.net.openURI(link.link)){
                     ui.showError("$linkfail");
-                    Core.app.getClipboard().setContents(link.link);
+                    Core.app.setClipboardText(link.link);
                 }
             }).size(h - 5, h);
 
@@ -85,11 +80,7 @@ public class AboutDialog extends FloatingDialog{
 
         buttons.addButton("$credits", this::showCredits).size(200f, 64f);
 
-        if(!ios && !OS.isMac){
-            buttons.addButton("$changelog.title", ui.changelog::show).size(200f, 64f);
-        }
-
-        if(UIUtils.portrait()){
+        if(Core.graphics.isPortrait()){
             for(Cell<?> cell : buttons.getCells()){
                 cell.width(140f);
             }
@@ -103,15 +94,15 @@ public class AboutDialog extends FloatingDialog{
         dialog.cont.add("$credits.text");
         dialog.cont.row();
         if(!contributors.isEmpty()){
-            dialog.cont.addImage("blank").color(Pal.accent).fillX().height(3f).pad(3f);
+            dialog.cont.addImage("whiteui").color(Pal.accent).fillX().height(3f).pad(3f);
             dialog.cont.row();
             dialog.cont.add("$contributors");
             dialog.cont.row();
             dialog.cont.pane(new Table(){{
                 int i = 0;
                 left();
-                for(Contributor c : contributors){
-                    add("[lightgray]" + c.login).left().pad(3).padLeft(6).padRight(6);
+                for(String c : contributors){
+                    add("[lightgray]" + c).left().pad(3).padLeft(6).padRight(6);
                     if(++i % 3 == 0){
                         row();
                     }

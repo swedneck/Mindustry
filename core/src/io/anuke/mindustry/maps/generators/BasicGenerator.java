@@ -39,8 +39,8 @@ public abstract class BasicGenerator extends RandomGenerator{
                 int offsetX = x - 4, offsetY = y + 23;
                 for(int i = ores.size - 1; i >= 0; i--){
                     Block entry = ores.get(i);
-                    if(Math.abs(0.5f - sim.octaveNoise2D(2, 0.7, 1f / (50 + i * 2), offsetX, offsetY + i*999)) > 0.23f &&
-                    Math.abs(0.5f - sim2.octaveNoise2D(1, 1, 1f / (40 + i * 4), offsetX, offsetY - i*999)) > 0.32f){
+                    if(Math.abs(0.5f - sim.octaveNoise2D(2, 0.7, 1f / (40 + i * 2), offsetX, offsetY + i*999)) > 0.26f &&
+                    Math.abs(0.5f - sim2.octaveNoise2D(1, 1, 1f / (30 + i * 4), offsetX, offsetY - i*999)) > 0.37f){
                         ore = entry;
                         break;
                     }
@@ -156,8 +156,7 @@ public abstract class BasicGenerator extends RandomGenerator{
                 block = tiles[x][y].block();
                 ore = tiles[x][y].overlay();
                 r.accept(x, y);
-                tiles[x][y] = new Tile(x, y, floor.id, block.id);
-                tiles[x][y].setOverlay(ore);
+                tiles[x][y] = new Tile(x, y, floor.id, ore.id, block.id);
             }
         }
     }
@@ -183,7 +182,7 @@ public abstract class BasicGenerator extends RandomGenerator{
         Tile end = tiles[endX][endY];
         GridBits closed = new GridBits(width, height);
         IntFloatMap costs = new IntFloatMap();
-        PriorityQueue<Tile> queue = new PriorityQueue<>((a, b) -> Float.compare(costs.get(a.pos(), 0f) + dh.cost(a.x, a.y, end.x, end.y), costs.get(b.pos(), 0f) + dh.cost(b.x, b.y, end.x, end.y)));
+        PriorityQueue<Tile> queue = new PriorityQueue<>(tiles.length * tiles[0].length / 2, (a, b) -> Float.compare(costs.get(a.pos(), 0f) + dh.cost(a.x, a.y, end.x, end.y), costs.get(b.pos(), 0f) + dh.cost(b.x, b.y, end.x, end.y)));
         queue.add(start);
         boolean found = false;
         while(!queue.isEmpty()){
@@ -200,7 +199,7 @@ public abstract class BasicGenerator extends RandomGenerator{
                     Tile child = tiles[newx][newy];
                     if(!closed.get(child.x, child.y)){
                         closed.set(child.x, child.y);
-                        child.setRotation(child.relativeTo(next.x, next.y));
+                        child.rotation(child.relativeTo(next.x, next.y));
                         costs.put(child.pos(), th.cost(child) + baseCost);
                         queue.add(child);
                     }
@@ -215,7 +214,7 @@ public abstract class BasicGenerator extends RandomGenerator{
         Tile current = end;
         while(current != start){
             out.add(current);
-            Point2 p = Geometry.d4(current.getRotation());
+            Point2 p = Geometry.d4(current.rotation());
             current = tiles[current.x + p.x][current.y + p.y];
         }
 

@@ -10,7 +10,6 @@ import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.arc.util.Align;
 import io.anuke.mindustry.content.Blocks;
 import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.input.InputHandler;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 
@@ -18,18 +17,26 @@ import static io.anuke.mindustry.Vars.*;
 
 public class BlockConfigFragment extends Fragment{
     private Table table = new Table();
-    private InputHandler input;
     private Tile configTile;
     private Block configBlock;
-
-    public BlockConfigFragment(InputHandler input){
-        this.input = input;
-    }
 
     @Override
     public void build(Group parent){
         table.visible(false);
         parent.addChild(table);
+
+        //hacky way to hide block config when in menu
+        //TODO remove?
+        Core.scene.add(new Element(){
+            @Override
+            public void act(float delta){
+                super.act(delta);
+                if(state.is(State.menu)){
+                    table.visible(false);
+                    configTile = null;
+                }
+            }
+        });
     }
 
     public boolean isShown(){
@@ -53,11 +60,6 @@ public class BlockConfigFragment extends Fragment{
         Actions.scaleTo(1f, 1f, 0.07f, Interpolation.pow3Out));
 
         table.update(() -> {
-            if(state.is(State.menu)){
-                hideConfig();
-                return;
-            }
-
             if(configTile != null && configTile.block().shouldHideConfigure(configTile, player)){
                 hideConfig();
                 return;

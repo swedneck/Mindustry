@@ -1,17 +1,19 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.scene.event.Touchable;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.scene.event.*;
 import io.anuke.arc.scene.ui.*;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.scene.utils.UIUtils;
+import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.core.Platform;
-import io.anuke.mindustry.io.MapIO;
-import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.ui.BorderImage;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.core.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.maps.*;
+import io.anuke.mindustry.ui.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -21,52 +23,94 @@ public class MapsDialog extends FloatingDialog{
     public MapsDialog(){
         super("$maps");
 
-        addCloseButton();
-        buttons.addImageTextButton("$editor.importmap", "icon-add", 14 * 2, () -> {
-            Platform.instance.showFileChooser("$editor.importmap", "Map File", file -> {
-                try{
-                    Map map = MapIO.readMap(file, true);
-                    String name = map.tags.get("name");
-                    if(name == null){
-                        ui.showError("$editor.errorname");
-                        return;
-                    }
+        buttons.remove();
 
-                    Map conflict = world.maps.all().find(m -> m.name().equals(name));
-
-                    if(conflict != null && !conflict.custom){
-                        ui.showError(Core.bundle.format("editor.import.exists", name));
-                    }else if(conflict != null){
-                        ui.showConfirm("$confirm", "$editor.overwrite.confirm", () -> {
-                            try{
-                                world.maps.importMap(file);
-                                setup();
-                            }catch(Exception e){
-                                ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
-                                Log.err(e);
-                            }
-                        });
-                    }else{
-                        world.maps.importMap(file);
-                        setup();
-                    }
-
-                }catch(Exception e){
-                    ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
-                    Log.err(e);
-                }
-            }, true, mapExtension);
-        }).size(230f, 64f);
+        keyDown(key -> {
+            if(key == KeyCode.ESCAPE || key == KeyCode.BACK){
+                Core.app.post(this::hide);
+            }
+        });
 
         shown(this::setup);
         onResize(() -> {
             if(dialog != null){
                 dialog.hide();
             }
+            setup();
         });
     }
 
     void setup(){
+        buttons.clearChildren();
+
+        if(Core.graphics.isPortrait() && !ios){
+            buttons.addImageTextButton("$back", "icon-arrow-left", iconsize, this::hide).size(210f*2f, 64f).colspan(2);
+            buttons.row();
+        }else{
+            buttons.addImageTextButton("$back", "icon-arrow-left", iconsize, this::hide).size(210f, 64f);
+        }
+
+        buttons.addImageTextButton("$editor.newmap", "icon-add", iconsize, () -> {
+            ui.showTextInput("$editor.newmap", "$name", "", text -> {
+                ui.loadAnd(() -> {
+                    hide();
+                    ui.editor.show();
+                    ui.editor.editor.getTags().put("name", text);
+                });
+            });
+        }).size(210f, 64f);
+
+        if(!ios){
+            buttons.addImageTextButton("$editor.importmap", "icon-load", iconsize, () -> {
+                Platform.instance.showFileChooser("$editor.importmap", "Map File", file -> {
+                    world.maps.tryCatchMapError(() -> {
+                        if(MapIO.isImage(file)){
+                            ui.showError("$editor.errorimage");
+                            return;
+                        }
+
+                        Map map;
+                        if(file.extension().equalsIgnoreCase(mapExtension)){
+                            map = MapIO.createMap(file, true);
+                        }else{
+                            map = world.maps.makeLegacyMap(file);
+                        }
+
+                        //when you attempt to import a save, it will have no name, so generate one
+                        String name = map.tags.getOr("name", () -> {
+                            String result = "unknown";
+                            int number = 0;
+                            while(world.maps.byName(result + number++) != null) ;
+                            return result + number;
+                        });
+
+                        //this will never actually get called, but it remains just in case
+                        if(name == null){
+                            ui.showError("$editor.errorname");
+                            return;
+                        }
+
+                        Map conflict = world.maps.all().find(m -> m.name().equals(name));
+
+                        if(conflict != null && !conflict.custom){
+                            ui.showInfo(Core.bundle.format("editor.import.exists", name));
+                        }else if(conflict != null){
+                            ui.showConfirm("$confirm", "$editor.overwrite.confirm", () -> {
+                                world.maps.tryCatchMapError(() -> {
+                                    world.maps.importMap(file);
+                                    setup();
+                                });
+                            });
+                        }else{
+                            world.maps.importMap(map.file);
+                            setup();
+                        }
+
+                    });
+                }, true, FileChooser.anyMapFiles);
+            }).size(210f, 64f);
+        }
+
         cont.clear();
 
         Table maps = new Table();
@@ -75,7 +119,7 @@ public class MapsDialog extends FloatingDialog{
         ScrollPane pane = new ScrollPane(maps);
         pane.setFadeScrollBars(false);
 
-        int maxwidth = 4;
+        int maxwidth = Mathf.clamp((int)(Core.graphics.getWidth() / UnitScl.dp.scl(230)), 1, 8);
         float mapsize = 200f;
 
         int i = 0;
@@ -90,7 +134,7 @@ public class MapsDialog extends FloatingDialog{
             button.margin(9);
             button.add(map.name()).width(mapsize - 18f).center().get().setEllipsis(true);
             button.row();
-            button.addImage("white").growX().pad(4).color(Color.GRAY);
+            button.addImage("whiteui").growX().pad(4).color(Pal.gray);
             button.row();
             button.stack(new Image(map.texture).setScaling(Scaling.fit), new BorderImage(map.texture).setScaling(Scaling.fit)).size(mapsize - 20f);
             button.row();
@@ -103,6 +147,8 @@ public class MapsDialog extends FloatingDialog{
             maps.add("$maps.none");
         }
 
+        cont.add(buttons).growX();
+        cont.row();
         cont.add(pane).uniformX();
     }
 
@@ -110,7 +156,7 @@ public class MapsDialog extends FloatingDialog{
         dialog = new FloatingDialog("$editor.mapinfo");
         dialog.addCloseButton();
 
-        float mapsize = UIUtils.portrait() ? 160f : 300f;
+        float mapsize = Core.graphics.isPortrait() ? 160f : 300f;
         Table table = dialog.cont;
 
         table.stack(new Image(map.texture).setScaling(Scaling.fit), new BorderImage(map.texture).setScaling(Scaling.fit)).size(mapsize);
@@ -132,7 +178,7 @@ public class MapsDialog extends FloatingDialog{
             t.row();
             t.add("$editor.author").padRight(10).color(Color.GRAY);
             t.row();
-            t.add(map.author()).growX().wrap().padTop(2);
+            t.add(map.custom && map.author().isEmpty() ? "Anuke" : map.author()).growX().wrap().padTop(2);
             t.row();
             t.add("$editor.description").padRight(10).color(Color.GRAY).top();
             t.row();
@@ -141,7 +187,7 @@ public class MapsDialog extends FloatingDialog{
 
         table.row();
 
-        table.addImageTextButton("$editor.openin", "icon-load-map", 16 * 2, () -> {
+        table.addImageTextButton("$editor.openin", "icon-load-map-small", iconsizesmall, () -> {
             try{
                 Vars.ui.editor.beginEditMap(map.file);
                 dialog.hide();
@@ -152,7 +198,7 @@ public class MapsDialog extends FloatingDialog{
             }
         }).fillX().height(54f).marginLeft(10);
 
-        table.addImageTextButton("$delete", "icon-trash-16", 16 * 2, () -> {
+        table.addImageTextButton("$delete", "icon-trash-16-small", iconsizesmall, () -> {
             ui.showConfirm("$confirm", Core.bundle.format("map.delete", map.name()), () -> {
                 world.maps.removeMap(map);
                 dialog.hide();

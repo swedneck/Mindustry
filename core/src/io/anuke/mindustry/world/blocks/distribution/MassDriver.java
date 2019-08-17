@@ -1,31 +1,22 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
-import io.anuke.annotations.Annotations.Loc;
-import io.anuke.annotations.Annotations.Remote;
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.ObjectSet;
-import io.anuke.arc.graphics.Color;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.graphics.g2d.*;
-import io.anuke.arc.math.Angles;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.pooling.Pool.Poolable;
-import io.anuke.arc.util.pooling.Pools;
-import io.anuke.mindustry.content.Bullets;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Effects.Effect;
-import io.anuke.mindustry.entities.bullet.Bullet;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.gen.Call;
-import io.anuke.mindustry.graphics.Layer;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.pooling.Pool.*;
+import io.anuke.arc.util.pooling.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.Effects.*;
+import io.anuke.mindustry.entities.bullet.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.world.*;
 
 import java.io.*;
 
@@ -42,7 +33,6 @@ public class MassDriver extends Block{
     protected Effect smokeEffect = Fx.shootBigSmoke2;
     protected Effect recieveEffect = Fx.mineBig;
     protected float shake = 3f;
-    protected float powerPercentageUsed = 0.95f;
     protected TextureRegion baseRegion;
 
     public MassDriver(String name){
@@ -53,7 +43,6 @@ public class MassDriver extends Block{
         hasItems = true;
         layer = Layer.turret;
         hasPower = true;
-        consumes.powerBuffered(30f);
         outlineIcon = true;
     }
 
@@ -61,47 +50,6 @@ public class MassDriver extends Block{
     public static void linkMassDriver(Player player, Tile tile, int position){
         MassDriverEntity entity = tile.entity();
         entity.link = position;
-    }
-
-    @Remote(called = Loc.server)
-    public static void onMassDriverFire(Tile tile, Tile target){
-        //just in case the client has invalid data
-        if(!(tile.entity instanceof MassDriverEntity) || !(target.entity instanceof MassDriverEntity)) return;
-
-        MassDriver driver = (MassDriver)tile.block();
-
-        MassDriverEntity entity = tile.entity();
-        MassDriverEntity other = target.entity();
-
-        entity.reload = 1f;
-
-        entity.power.satisfaction -= Math.min(entity.power.satisfaction, driver.powerPercentageUsed);
-
-        DriverBulletData data = Pools.obtain(DriverBulletData.class, DriverBulletData::new);
-        data.from = entity;
-        data.to = other;
-        int totalUsed = 0;
-        for(int i = 0; i < content.items().size; i++){
-            int maxTransfer = Math.min(entity.items.get(content.item(i)), ((MassDriver)tile.block()).itemCapacity - totalUsed);
-            data.items[i] = maxTransfer;
-            totalUsed += maxTransfer;
-        }
-        entity.items.clear();
-
-        float angle = tile.angleTo(target);
-
-        other.isRecieving = true;
-        Bullet.create(Bullets.driverBolt, entity, entity.getTeam(),
-        tile.drawx() + Angles.trnsx(angle, driver.translation), tile.drawy() + Angles.trnsy(angle, driver.translation),
-        angle, 1f, 1f, data);
-
-        Effects.effect(driver.shootEffect, tile.drawx() + Angles.trnsx(angle, driver.translation),
-        tile.drawy() + Angles.trnsy(angle, driver.translation), angle);
-
-        Effects.effect(driver.smokeEffect, tile.drawx() + Angles.trnsx(angle, driver.translation),
-        tile.drawy() + Angles.trnsy(angle, driver.translation), angle);
-
-        Effects.shake(driver.shake, driver.shake, entity);
     }
 
     @Override
@@ -117,60 +65,84 @@ public class MassDriver extends Block{
     }
 
     @Override
-    public void setStats(){
-        super.setStats();
-
-        stats.add(BlockStat.powerShot, consumes.getPower().powerCapacity * powerPercentageUsed, StatUnit.powerUnits);
-    }
-
-    @Override
     public void update(Tile tile){
         MassDriverEntity entity = tile.entity();
-
         Tile link = world.tile(entity.link);
+        boolean hasLink = linkValid(tile);
 
-        if(entity.isUnloading){
-            tryDump(tile);
-            if(entity.items.total() <= 0){
-                entity.isUnloading = false;
+        //reload regardless of state
+        if(entity.reload > 0f){
+            entity.reload = Mathf.clamp(entity.reload - entity.delta() / reloadTime * entity.power.satisfaction);
+        }
+
+        //cleanup waiting shooters that are not valid
+        if(!shooterValid(tile, entity.currentShooter())){
+            entity.waitingShooters.remove(entity.currentShooter());
+        }
+
+        //switch states
+        if(entity.state == DriverState.idle){
+            //start accepting when idle
+            if(!entity.waitingShooters.isEmpty()){
+                entity.state = DriverState.accepting;
+            }else if(hasLink){ //switch to shooting if there's a valid link.
+                entity.state = DriverState.shooting;
             }
         }
 
-        if(entity.reload > 0f){
-            entity.reload = Mathf.clamp(entity.reload - entity.delta() / reloadTime);
+        //dump when idle or accepting
+        if(entity.state == DriverState.idle || entity.state == DriverState.accepting){
+            tryDump(tile);
         }
 
-        //unload when dest is full
-        if(!linkValid(tile) || (link.entity.items.total() >= itemCapacity) && entity.items.total() > 0){
-            entity.isUnloading = true;
+        //skip when there's no power
+        if(!entity.cons.valid()){
+            return;
         }
 
-        if(!entity.isRecieving){
+        if(entity.state == DriverState.accepting){
+            //if there's nothing shooting at this, bail
+            if(entity.currentShooter() == null){
+                entity.state = DriverState.idle;
+                return;
+            }
 
-            if(entity.waiting.size > 0){ //accepting takes priority over shooting
-                Tile waiter = entity.waiting.first();
+            //align to shooter rotation
+            entity.rotation = Mathf.slerpDelta(entity.rotation, tile.angleTo(entity.currentShooter()), rotateSpeed * entity.power.satisfaction);
+        }else if(entity.state == DriverState.shooting){
+            //if there's nothing to shoot at OR someone wants to shoot at this thing, bail
+            if(!hasLink || !entity.waitingShooters.isEmpty()){
+                entity.state = DriverState.idle;
+                return;
+            }
 
-                entity.rotation = Mathf.slerpDelta(entity.rotation, tile.angleTo(waiter), rotateSpeed);
-            }else if(tile.entity.items.total() >= minDistribute &&
-            linkValid(tile) && //only fire when at 100% power capacity
-            tile.entity.power.satisfaction >= powerPercentageUsed &&
-            link.block().itemCapacity - link.entity.items.total() >= minDistribute && entity.reload <= 0.0001f){
+            float targetRotation = tile.angleTo(link);
 
+            if(
+                tile.entity.items.total() >= minDistribute && //must shoot minimum amount of items
+                link.block().itemCapacity - link.entity.items.total() >= minDistribute && //must have minimum amount of space
+                entity.reload <= 0.0001f //must have reloaded
+            ){
                 MassDriverEntity other = link.entity();
-                other.waiting.add(tile);
+                other.waitingShooters.add(tile);
 
-                float target = tile.angleTo(link);
+                //align to target location
+                entity.rotation = Mathf.slerpDelta(entity.rotation, targetRotation, rotateSpeed * entity.power.satisfaction);
 
-                entity.rotation = Mathf.slerpDelta(entity.rotation, target, rotateSpeed);
-
-                if(Angles.near(entity.rotation, target, 1f) &&
-                Angles.near(other.rotation, target + 180f, 1f)){
-                    Call.onMassDriverFire(tile, link);
+                //fire when it's the first in the queue and angles are ready.
+                if(other.currentShooter() == tile &&
+                    other.state == DriverState.accepting &&
+                    Angles.near(entity.rotation, targetRotation, 2f) && Angles.near(other.rotation, targetRotation + 180f, 2f)){
+                    //actually fire
+                    fire(tile, link);
+                    //remove waiting shooters, it's done firing
+                    other.waitingShooters.remove(tile);
+                    //set both states to idle
+                    entity.state = DriverState.idle;
+                    other.state = DriverState.idle;
                 }
             }
         }
-
-        entity.waiting.clear();
     }
 
     @Override
@@ -188,26 +160,27 @@ public class MassDriver extends Block{
     }
 
     @Override
+    public void drawPlace(int x, int y, int rotation, boolean valid){
+        Drawf.dashCircle(x * tilesize, y*tilesize, range, Pal.accent);
+    }
+
+    @Override
     public void drawConfigure(Tile tile){
         float sin = Mathf.absin(Time.time(), 6f, 1f);
 
         Draw.color(Pal.accent);
         Lines.stroke(1f);
-        Lines.poly(tile.drawx(), tile.drawy(), 20, (tile.block().size / 2f + 1) * tilesize + sin);
+        Drawf.circles(tile.drawx(), tile.drawy(), (tile.block().size / 2f + 1) * tilesize + sin - 2f, Pal.accent);
 
         MassDriverEntity entity = tile.entity();
 
         if(linkValid(tile)){
             Tile target = world.tile(entity.link);
-
-            Draw.color(Pal.place);
-            Lines.poly(target.drawx(), target.drawy(), 20, (target.block().size / 2f + 1) * tilesize + sin);
-            Draw.reset();
+            Drawf.circles(target.drawx(), target.drawy(), (target.block().size / 2f + 1) * tilesize + sin - 2f, Pal.place);
+            Drawf.arrow(tile.drawx(), tile.drawy(), target.drawx(), target.drawy(), size * tilesize + sin, 4f + sin);
         }
 
-        Draw.color(Pal.accent);
-        Lines.dashCircle(tile.drawx(), tile.drawy(), range);
-        Draw.color();
+        Drawf.dashCircle(tile.drawx(), tile.drawy(), range, Pal.accent);
     }
 
     @Override
@@ -219,7 +192,7 @@ public class MassDriver extends Block{
         if(entity.link == other.pos()){
             Call.linkMassDriver(null, tile, -1);
             return false;
-        }else if(other.block() instanceof MassDriver && other.dst(tile) <= range){
+        }else if(other.block() instanceof MassDriver && other.dst(tile) <= range && other.getTeam() == tile.getTeam()){
             Call.linkMassDriver(null, tile, other.pos());
             return false;
         }
@@ -229,7 +202,8 @@ public class MassDriver extends Block{
 
     @Override
     public boolean acceptItem(Item item, Tile tile, Tile source){
-        return tile.entity.items.total() < itemCapacity;
+        //mass drivers that ouput only cannot accept items
+        return tile.entity.items.total() < itemCapacity && linkValid(tile);
     }
 
     @Override
@@ -237,7 +211,70 @@ public class MassDriver extends Block{
         return new MassDriverEntity();
     }
 
+    protected void fire(Tile tile, Tile target){
+        MassDriverEntity entity = tile.entity();
+        MassDriverEntity other = target.entity();
+
+        //reset reload, use power.
+        entity.reload = 1f;
+
+        DriverBulletData data = Pools.obtain(DriverBulletData.class, DriverBulletData::new);
+        data.from = entity;
+        data.to = other;
+        int totalUsed = 0;
+        for(int i = 0; i < content.items().size; i++){
+            int maxTransfer = Math.min(entity.items.get(content.item(i)), ((MassDriver)tile.block()).itemCapacity - totalUsed);
+            data.items[i] = maxTransfer;
+            totalUsed += maxTransfer;
+        }
+        entity.items.clear();
+
+        float angle = tile.angleTo(target);
+
+        Bullet.create(Bullets.driverBolt, entity, entity.getTeam(),
+        tile.drawx() + Angles.trnsx(angle, translation), tile.drawy() + Angles.trnsy(angle, translation),
+        angle, 1f, 1f, data);
+
+        Effects.effect(shootEffect, tile.drawx() + Angles.trnsx(angle, translation),
+        tile.drawy() + Angles.trnsy(angle, translation), angle);
+
+        Effects.effect(smokeEffect, tile.drawx() + Angles.trnsx(angle, translation),
+        tile.drawy() + Angles.trnsy(angle, translation), angle);
+
+        Effects.shake(shake, shake, entity);
+    }
+
+    protected void handlePayload(MassDriverEntity entity, Bullet bullet, DriverBulletData data){
+        int totalItems = entity.items.total();
+
+        //add all the items possible
+        for(int i = 0; i < data.items.length; i++){
+            int maxAdd = Math.min(data.items[i], itemCapacity * 2 - totalItems);
+            entity.items.add(content.item(i), maxAdd);
+            data.items[i] -= maxAdd;
+            totalItems += maxAdd;
+
+            if(totalItems >= itemCapacity * 2){
+                break;
+            }
+        }
+
+        Effects.shake(shake, shake, entity);
+        Effects.effect(recieveEffect, bullet);
+
+        entity.reload = 1f;
+        bullet.remove();
+    }
+
+    protected boolean shooterValid(Tile tile, Tile other){
+        if(other == null) return true;
+        if(!(other.block() instanceof MassDriver)) return false;
+        MassDriverEntity entity = other.entity();
+        return entity.link == tile.pos() && tile.dst(other) <= range;
+    }
+
     protected boolean linkValid(Tile tile){
+        if(tile == null) return false;
         MassDriverEntity entity = tile.entity();
         if(entity == null || entity.link == -1) return false;
         Tile link = world.tile(entity.link);
@@ -257,63 +294,41 @@ public class MassDriver extends Block{
     }
 
     public class MassDriverEntity extends TileEntity{
-        public int link = -1;
-        public float rotation = 90;
-        //set of tiles that currently want to distribute to this tile
-        public ObjectSet<Tile> waiting = new ObjectSet<>();
-        //whether this mass driver is waiting for a bullet to hit it and deliver items
-        public boolean isRecieving;
-        //whether this driver just recieved some items and is now unloading
-        public boolean isUnloading = true;
+        int link = -1;
+        float rotation = 90;
+        float reload = 0f;
+        DriverState state = DriverState.idle;
+        OrderedSet<Tile> waitingShooters = new OrderedSet<>();
 
-        public float reload = 0f;
+        Tile currentShooter(){
+            return waitingShooters.isEmpty() ? null : waitingShooters.first();
+        }
 
         public void handlePayload(Bullet bullet, DriverBulletData data){
-            int totalItems = items.total();
-
-            //add all the items possible
-            for(int i = 0; i < data.items.length; i++){
-                int maxAdd = Math.min(data.items[i], itemCapacity * 2 - totalItems);
-                items.add(content.item(i), maxAdd);
-                data.items[i] -= maxAdd;
-                totalItems += maxAdd;
-
-                if(totalItems >= itemCapacity * 2){
-                    break;
-                }
-            }
-
-            //drop all items remaining on the ground
-            for(int i = 0; i < data.items.length; i++){
-                int amountDropped = Mathf.random(0, data.items[i]);
-                if(amountDropped > 0){
-                    float angle = Mathf.range(180f);
-                    Effects.effect(Fx.dropItem, Color.WHITE, bullet.x, bullet.y, angle, content.item(i));
-                }
-            }
-
-            reload = 1f;
-            Effects.shake(shake, shake, this);
-            Effects.effect(recieveEffect, bullet);
-
-            isRecieving = false;
-            bullet.remove();
-
-            if(!linkValid(tile)){
-                isUnloading = true;
-            }
+            ((MassDriver)block).handlePayload(this, bullet, data);
         }
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeInt(link);
             stream.writeFloat(rotation);
+            stream.writeByte((byte)state.ordinal());
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             link = stream.readInt();
             rotation = stream.readFloat();
+            state = DriverState.values()[stream.readByte()];
         }
+    }
+
+    enum DriverState{
+        idle, //nothing is shooting at this mass driver and it does not have any target
+        accepting, //currently getting shot at, unload items
+        shooting,
+        unloading
     }
 }

@@ -3,8 +3,7 @@ package io.anuke.mindustry.entities;
 import io.anuke.annotations.Annotations.Struct;
 import io.anuke.arc.collection.GridBits;
 import io.anuke.arc.collection.IntQueue;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.function.Predicate;
+import io.anuke.arc.function.*;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.*;
@@ -36,7 +35,7 @@ public class Damage{
     public static void dynamicExplosion(float x, float y, float flammability, float explosiveness, float power, float radius, Color color){
         for(int i = 0; i < Mathf.clamp(power / 20, 0, 6); i++){
             int branches = 5 + Mathf.clamp((int)(power / 30), 1, 20);
-            Time.run(i * 2f + Mathf.random(4f), () -> Lightning.create(Team.none, Pal.power, 3,
+            Time.run(i * 2f + Mathf.random(4f), () -> Lightning.create(Team.derelict, Pal.power, 3,
             x, y, Mathf.random(360f), branches + Mathf.range(2)));
         }
 
@@ -78,17 +77,30 @@ public class Damage{
         }
     }
 
+    public static void collideLine(Bullet hitter, Team team, Effect effect, float x, float y, float angle, float length){
+        collideLine(hitter, team, effect, x, y, angle, length, false);
+    }
+
     /**
      * Damages entities in a line.
      * Only enemies of the specified team are damaged.
      */
-    public static void collideLine(Bullet hitter, Team team, Effect effect, float x, float y, float angle, float length){
+    public static void collideLine(Bullet hitter, Team team, Effect effect, float x, float y, float angle, float length, boolean large){
         tr.trns(angle, length);
-        world.raycastEachWorld(x, y, x + tr.x, y + tr.y, (cx, cy) -> {
-            Tile tile = world.tile(cx, cy);
-            if(tile != null && tile.entity != null && tile.target().getTeamID() != team.ordinal() && tile.entity.collide(hitter)){
+        IntPositionConsumer collider = (cx, cy) -> {
+            Tile tile = world.ltile(cx, cy);
+            if(tile != null && tile.entity != null && tile.getTeamID() != team.ordinal() && tile.entity.collide(hitter)){
                 tile.entity.collision(hitter);
                 hitter.getBulletType().hit(hitter, tile.worldx(), tile.worldy());
+            }
+        };
+
+        world.raycastEachWorld(x, y, x + tr.x, y + tr.y, (cx, cy) -> {
+            collider.accept(cx, cy);
+            if(large){
+                for(Point2 p : Geometry.d4){
+                    collider.accept(cx + p.x, cy + p.y);
+                }
             }
             return false;
         });
@@ -113,7 +125,7 @@ public class Damage{
         rect.width += expand * 2;
         rect.height += expand * 2;
 
-        Consumer<io.anuke.mindustry.entities.type.Unit> cons = e -> {
+        Consumer<Unit> cons = e -> {
             e.hitbox(hitrect);
             Rectangle other = hitrect;
             other.y -= expand;
@@ -130,12 +142,12 @@ public class Damage{
             }
         };
 
-        Units.getNearbyEnemies(team, rect, cons);
+        Units.nearbyEnemies(team, rect, cons);
     }
 
     /** Damages all entities and blocks in a radius that are enemies of the team. */
-    public static void damageUnits(Team team, float x, float y, float size, float damage, Predicate<io.anuke.mindustry.entities.type.Unit> predicate, Consumer<io.anuke.mindustry.entities.type.Unit> acceptor){
-        Consumer<io.anuke.mindustry.entities.type.Unit> cons = entity -> {
+    public static void damageUnits(Team team, float x, float y, float size, float damage, Predicate<Unit> predicate, Consumer<Unit> acceptor){
+        Consumer<Unit> cons = entity -> {
             if(!predicate.test(entity)) return;
 
             entity.hitbox(hitrect);
@@ -148,9 +160,9 @@ public class Damage{
 
         rect.setSize(size * 2).setCenter(x, y);
         if(team != null){
-            Units.getNearbyEnemies(team, rect, cons);
+            Units.nearbyEnemies(team, rect, cons);
         }else{
-            Units.getNearby(rect, cons);
+            Units.nearby(rect, cons);
         }
     }
 
@@ -179,9 +191,9 @@ public class Damage{
 
         rect.setSize(radius * 2).setCenter(x, y);
         if(team != null){
-            Units.getNearbyEnemies(team, rect, cons);
+            Units.nearbyEnemies(team, rect, cons);
         }else{
-            Units.getNearby(rect, cons);
+            Units.nearby(rect, cons);
         }
 
         if(!complete){
@@ -215,19 +227,19 @@ public class Damage{
             int scaledDamage = (int)(damage * (1f - (float)dst / radius));
 
             bits.set(bitOffset + x, bitOffset + y);
-            Tile tile = world.tile(startx + x, starty + y);
+            Tile tile = world.ltile(startx + x, starty + y);
 
             if(scaledDamage <= 0 || tile == null) continue;
-
-            tile = tile.target();
 
             //apply damage to entity if needed
             if(tile.entity != null && tile.getTeam() != team){
                 int health = (int)tile.entity.health;
-                tile.entity.damage(scaledDamage);
-                scaledDamage -= health;
+                if(tile.entity.health > 0){
+                    tile.entity.damage(scaledDamage);
+                    scaledDamage -= health;
 
-                if(scaledDamage <= 0) continue;
+                    if(scaledDamage <= 0) continue;
+                }
             }
 
             for(Point2 p : Geometry.d4){

@@ -1,6 +1,7 @@
 package io.anuke.mindustry.world.blocks.defense.turrets;
 
 import io.anuke.arc.Core;
+import io.anuke.arc.audio.*;
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.EnumSet;
 import io.anuke.arc.function.BiConsumer;
@@ -18,8 +19,8 @@ import io.anuke.mindustry.entities.bullet.Bullet;
 import io.anuke.mindustry.entities.bullet.BulletType;
 import io.anuke.mindustry.entities.traits.TargetTrait;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.graphics.Layer;
-import io.anuke.mindustry.graphics.Pal;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.meta.*;
@@ -35,6 +36,7 @@ public abstract class Turret extends Block{
     protected Effect shootEffect = Fx.none;
     protected Effect smokeEffect = Fx.none;
     protected Effect ammoUseEffect = Fx.none;
+    protected Sound shootSound = Sounds.shoot;
 
     protected int ammoPerShot = 1;
     protected float ammoEjectBack = 1f;
@@ -58,8 +60,7 @@ public abstract class Turret extends Block{
 
     protected TextureRegion baseRegion, heatRegion;
 
-    protected BiConsumer<Tile, TurretEntity> drawer = (tile, entity) ->
-    Draw.rect(region, tile.drawx() + tr2.x, tile.drawy() + tr2.y, entity.rotation - 90);
+    protected BiConsumer<Tile, TurretEntity> drawer = (tile, entity) -> Draw.rect(region, tile.drawx() + tr2.x, tile.drawy() + tr2.y, entity.rotation - 90);
     protected BiConsumer<Tile, TurretEntity> heatDrawer = (tile, entity) -> {
         if(entity.heat <= 0.00001f) return;
         Draw.color(heatColor, entity.heat);
@@ -97,7 +98,7 @@ public abstract class Turret extends Block{
     public void setStats(){
         super.setStats();
 
-        stats.add(BlockStat.shootRange, range, StatUnit.blocks);
+        stats.add(BlockStat.shootRange, range / tilesize, StatUnit.blocks);
         stats.add(BlockStat.inaccuracy, (int)inaccuracy, StatUnit.degrees);
         stats.add(BlockStat.reload, 60f / reload * shots, StatUnit.none);
         stats.add(BlockStat.shots, shots, StatUnit.none);
@@ -131,24 +132,19 @@ public abstract class Turret extends Block{
 
     @Override
     public void drawSelect(Tile tile){
-        Draw.color(tile.getTeam().color);
-        Lines.dashCircle(tile.drawx(), tile.drawy(), range);
-        Draw.reset();
+        Drawf.dashCircle(tile.drawx(), tile.drawy(), range, tile.getTeam().color);
     }
 
     @Override
     public void drawPlace(int x, int y, int rotation, boolean valid){
-        Lines.stroke(1f, Pal.placing);
-        Lines.dashCircle(x * tilesize + offset(), y * tilesize + offset(), range);
-        Draw.color();
+        Drawf.dashCircle(x * tilesize + offset(), y * tilesize + offset(), range, Pal.placing);
     }
 
     @Override
     public void update(Tile tile){
         TurretEntity entity = tile.entity();
 
-        if(entity.target != null && entity.target.isDead())
-            entity.target = null;
+        if(!validateTarget(tile)) entity.target = null;
 
         entity.recoil = Mathf.lerpDelta(entity.recoil, 0f, restitution);
         entity.heat = Mathf.lerpDelta(entity.heat, 0f, cooldown);
@@ -195,8 +191,11 @@ public abstract class Turret extends Block{
     protected void findTarget(Tile tile){
         TurretEntity entity = tile.entity();
 
-        entity.target = Units.getClosestTarget(tile.getTeam(),
-        tile.drawx(), tile.drawy(), range, e -> !e.isDead() && (!e.isFlying() || targetAir) && (e.isFlying() || targetGround));
+        if(targetAir && !targetGround){
+            entity.target = Units.closestEnemy(tile.getTeam(), tile.drawx(), tile.drawy(), range, e -> !e.isDead() && e.isFlying());
+        }else{
+            entity.target = Units.closestTarget(tile.getTeam(), tile.drawx(), tile.drawy(), range, e -> !e.isDead() && (!e.isFlying() || targetAir) && (e.isFlying() || targetGround));
+        }
     }
 
     protected void turnToTarget(Tile tile, float targetRot){
@@ -248,7 +247,7 @@ public abstract class Turret extends Block{
 
             entity.reload = 0f;
         }else{
-            entity.reload += tile.entity.delta() * peekAmmo(tile).reloadMultiplier;
+            entity.reload += tile.entity.delta() * peekAmmo(tile).reloadMultiplier * baseReloadSpeed(tile);
         }
     }
 
@@ -280,6 +279,7 @@ public abstract class Turret extends Block{
 
         Effects.effect(shootEffect, tile.drawx() + tr.x, tile.drawy() + tr.y, entity.rotation);
         Effects.effect(smokeEffect, tile.drawx() + tr.x, tile.drawy() + tr.y, entity.rotation);
+        shootSound.at(tile, Mathf.random(0.9f, 1.1f));
 
         if(shootShake > 0){
             Effects.shake(shootShake, shootShake, tile.entity);
@@ -294,6 +294,10 @@ public abstract class Turret extends Block{
 
         Effects.effect(ammoUseEffect, tile.drawx() - Angles.trnsx(entity.rotation, ammoEjectBack),
         tile.drawy() - Angles.trnsy(entity.rotation, ammoEjectBack), entity.rotation);
+    }
+
+    protected float baseReloadSpeed(Tile tile){
+        return 1f;
     }
 
     protected boolean isTurret(Tile tile){

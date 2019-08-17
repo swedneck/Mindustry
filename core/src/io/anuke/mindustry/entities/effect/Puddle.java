@@ -16,6 +16,7 @@ import io.anuke.mindustry.content.*;
 import io.anuke.mindustry.entities.*;
 import io.anuke.mindustry.entities.impl.SolidEntity;
 import io.anuke.mindustry.entities.traits.*;
+import io.anuke.mindustry.game.TypeID;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.type.Liquid;
@@ -144,6 +145,16 @@ public class Puddle extends SolidEntity implements SaveTrait, Poolable, DrawTrai
     }
 
     @Override
+    public TypeID getTypeID(){
+        return TypeIDs.puddle;
+    }
+
+    @Override
+    public byte version(){
+        return 0;
+    }
+
+    @Override
     public void hitbox(Rectangle rectangle){
         rectangle.setCenter(x, y).setSize(tilesize);
     }
@@ -188,7 +199,7 @@ public class Puddle extends SolidEntity implements SaveTrait, Poolable, DrawTrai
 
         //effects-only code
         if(amount >= maxLiquid / 2f && updateTime <= 0f){
-            Units.getNearby(rect.setSize(Mathf.clamp(amount / (maxLiquid / 1.5f)) * 10f).setCenter(x, y), unit -> {
+            Units.nearby(rect.setSize(Mathf.clamp(amount / (maxLiquid / 1.5f)) * 10f).setCenter(x, y), unit -> {
                 if(unit.isFlying()) return;
 
                 unit.hitbox(rect2);
@@ -201,7 +212,7 @@ public class Puddle extends SolidEntity implements SaveTrait, Poolable, DrawTrai
                 }
             });
 
-            if(liquid.temperature > 0.7f && (tile.target().entity != null) && Mathf.chance(0.3 * Time.delta())){
+            if(liquid.temperature > 0.7f && (tile.link().entity != null) && Mathf.chance(0.3 * Time.delta())){
                 Fire.create(tile);
             }
 
@@ -245,7 +256,7 @@ public class Puddle extends SolidEntity implements SaveTrait, Poolable, DrawTrai
     }
 
     @Override
-    public void readSave(DataInput stream) throws IOException{
+    public void readSave(DataInput stream, byte version) throws IOException{
         this.loadedPosition = stream.readInt();
         this.x = stream.readFloat();
         this.y = stream.readFloat();
@@ -275,7 +286,9 @@ public class Puddle extends SolidEntity implements SaveTrait, Poolable, DrawTrai
 
     @Override
     public void removed(){
-        map.remove(tile.pos());
+        if(tile != null){
+            map.remove(tile.pos());
+        }
         reset();
     }
 

@@ -1,29 +1,28 @@
 package io.anuke.mindustry.core;
 
-import io.anuke.arc.ApplicationListener;
-import io.anuke.arc.Core;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.function.Predicate;
+import io.anuke.arc.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.function.*;
 import io.anuke.arc.graphics.*;
 import io.anuke.arc.graphics.g2d.*;
-import io.anuke.arc.graphics.glutils.FrameBuffer;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Rectangle;
-import io.anuke.arc.math.geom.Vector2;
+import io.anuke.arc.graphics.glutils.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
-import io.anuke.arc.util.pooling.Pools;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.core.GameState.State;
+import io.anuke.arc.util.pooling.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.core.GameState.*;
 import io.anuke.mindustry.entities.*;
-import io.anuke.mindustry.entities.effect.GroundEffectEntity;
-import io.anuke.mindustry.entities.effect.GroundEffectEntity.GroundEffect;
-import io.anuke.mindustry.entities.impl.EffectEntity;
+import io.anuke.mindustry.entities.effect.*;
+import io.anuke.mindustry.entities.effect.GroundEffectEntity.*;
+import io.anuke.mindustry.entities.impl.*;
 import io.anuke.mindustry.entities.traits.*;
 import io.anuke.mindustry.entities.type.*;
-import io.anuke.mindustry.game.Team;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.graphics.*;
-import io.anuke.mindustry.world.blocks.defense.ForceProjector.ShieldEntity;
+import io.anuke.mindustry.world.blocks.defense.ForceProjector.*;
 
 import static io.anuke.arc.Core.*;
 import static io.anuke.mindustry.Vars.*;
@@ -35,16 +34,18 @@ public class Renderer implements ApplicationListener{
     public final Pixelator pixelator = new Pixelator();
 
     public FrameBuffer shieldBuffer = new FrameBuffer(2, 2);
+    private Bloom bloom;
     private Color clearColor;
-    private float targetscale = io.anuke.arc.scene.ui.layout.Unit.dp.scl(4);
+    private float targetscale = UnitScl.dp.scl(4);
     private float camerascale = targetscale;
     private Rectangle rect = new Rectangle(), rect2 = new Rectangle();
     private float shakeIntensity, shaketime;
 
     public Renderer(){
-        batch = new SpriteBatch(4096);
         camera = new Camera();
-        Lines.setCircleVertices(20);
+        if(settings.getBool("bloom")){
+            setupBloom();
+        }
         Shaders.init();
 
         Effects.setScreenShakeProvider((intensity, duration) -> {
@@ -113,7 +114,7 @@ public class Renderer implements ApplicationListener{
                 }else{
                     camera.position.lerpDelta(position, 0.08f);
                 }
-            }else if(!mobile){
+            }else if(!mobile || settings.getBool("keyboard")){
                 camera.position.lerpDelta(position, 0.08f);
             }
 
@@ -122,6 +123,54 @@ public class Renderer implements ApplicationListener{
                 pixelator.drawPixelate();
             }else{
                 draw();
+            }
+        }
+    }
+
+    @Override
+    public void dispose(){
+        minimap.dispose();
+        shieldBuffer.dispose();
+        blocks.dispose();
+        if(bloom != null){
+            bloom.dispose();
+            bloom = null;
+        }
+        Events.fire(new DisposeEvent());
+    }
+
+    @Override
+    public void resize(int width, int height){
+        if(settings.getBool("bloom")){
+            setupBloom();
+        }
+    }
+
+    void setupBloom(){
+        try{
+            if(bloom != null){
+                bloom.dispose();
+                bloom = null;
+            }
+            bloom = new Bloom(true);
+            bloom.setClearColor(0f, 0f, 0f, 0f);
+        }catch(Exception e){
+            e.printStackTrace();
+            settings.put("bloom", false);
+            settings.save();
+            ui.showError("$error.bloom");
+        }
+    }
+
+    public void toggleBloom(boolean enabled){
+        if(enabled){
+            if(bloom == null){
+                setupBloom();
+            }
+        }else{
+            if(bloom != null){
+                bloom.dispose();
+                bloom = null;
             }
         }
     }
@@ -156,9 +205,9 @@ public class Renderer implements ApplicationListener{
 
         blocks.floor.drawFloor();
 
-        drawAndInterpolate(groundEffectGroup, e -> e instanceof BelowLiquidTrait);
-        drawAndInterpolate(puddleGroup);
-        drawAndInterpolate(groundEffectGroup, e -> !(e instanceof BelowLiquidTrait));
+        draw(groundEffectGroup, e -> e instanceof BelowLiquidTrait);
+        draw(puddleGroup);
+        draw(groundEffectGroup, e -> !(e instanceof BelowLiquidTrait));
 
         blocks.processBlocks();
 
@@ -182,26 +231,37 @@ public class Renderer implements ApplicationListener{
 
         drawAllTeams(false);
 
-        blocks.skipLayer(Layer.turret);
-        blocks.drawBlocks(Layer.laser);
+        blocks.drawBlocks(Layer.turret);
 
         drawFlyerShadows();
 
+        blocks.drawBlocks(Layer.power);
+
         drawAllTeams(true);
 
-        drawAndInterpolate(bulletGroup);
-        drawAndInterpolate(effectGroup);
+        Draw.flush();
+        if(bloom != null && !pixelator.enabled()){
+            bloom.capture();
+        }
+
+        draw(bulletGroup);
+        draw(effectGroup);
+
+        Draw.flush();
+        if(bloom != null && !pixelator.enabled()){
+            bloom.render();
+        }
 
         overlays.drawBottom();
-        drawAndInterpolate(playerGroup, p -> true, Player::drawBuildRequests);
+        draw(playerGroup, p -> true, Player::drawBuildRequests);
 
-        if(EntityDraw.countInBounds(shieldGroup) > 0){
+        if(Entities.countInBounds(shieldGroup) > 0){
             if(settings.getBool("animatedshields")){
                 Draw.flush();
                 shieldBuffer.begin();
                 graphics.clear(Color.CLEAR);
-                EntityDraw.draw(shieldGroup);
-                EntityDraw.drawWith(shieldGroup, shield -> true, shield -> ((ShieldEntity)shield).drawOver());
+                Entities.draw(shieldGroup);
+                Entities.draw(shieldGroup, shield -> true, shield -> ((ShieldEntity)shield).drawOver());
                 Draw.flush();
                 shieldBuffer.end();
                 Draw.shader(Shaders.shield);
@@ -210,13 +270,13 @@ public class Renderer implements ApplicationListener{
                 Draw.color();
                 Draw.shader();
             }else{
-                EntityDraw.drawWith(shieldGroup, shield -> true, shield -> ((ShieldEntity)shield).drawSimple());
+                Entities.draw(shieldGroup, shield -> true, shield -> ((ShieldEntity)shield).drawSimple());
             }
         }
 
         overlays.drawTop();
 
-        drawAndInterpolate(playerGroup, p -> !p.isDead() && !p.isLocal, Player::drawName);
+        draw(playerGroup, p -> !p.isDead() && !p.isLocal, Player::drawName);
 
         Draw.color();
         Draw.flush();
@@ -233,12 +293,12 @@ public class Renderer implements ApplicationListener{
 
         for(EntityGroup<? extends BaseUnit> group : unitGroups){
             if(!group.isEmpty()){
-                drawAndInterpolate(group, unit -> !unit.isDead(), draw::accept);
+                draw(group, unit -> !unit.isDead(), draw::accept);
             }
         }
 
         if(!playerGroup.isEmpty()){
-            drawAndInterpolate(playerGroup, unit -> !unit.isDead(), draw::accept);
+            draw(playerGroup, unit -> !unit.isDead(), draw::accept);
         }
 
         Draw.color();
@@ -250,12 +310,12 @@ public class Renderer implements ApplicationListener{
 
         for(EntityGroup<? extends BaseUnit> group : unitGroups){
             if(!group.isEmpty()){
-                drawAndInterpolate(group, unit -> unit.isFlying() && !unit.isDead(), baseUnit -> baseUnit.drawShadow(trnsX, trnsY));
+                draw(group, unit -> unit.isFlying() && !unit.isDead(), baseUnit -> baseUnit.drawShadow(trnsX, trnsY));
             }
         }
 
         if(!playerGroup.isEmpty()){
-            drawAndInterpolate(playerGroup, unit -> unit.isFlying() && !unit.isDead(), player -> player.drawShadow(trnsX, trnsY));
+            draw(playerGroup, unit -> unit.isFlying() && !unit.isDead(), player -> player.drawShadow(trnsX, trnsY));
         }
 
         Draw.color();
@@ -265,31 +325,29 @@ public class Renderer implements ApplicationListener{
         for(Team team : Team.all){
             EntityGroup<BaseUnit> group = unitGroups[team.ordinal()];
 
-            if(group.count(p -> p.isFlying() == flying) +
-            playerGroup.count(p -> p.isFlying() == flying && p.getTeam() == team) == 0 && flying) continue;
+            if(group.count(p -> p.isFlying() == flying) + playerGroup.count(p -> p.isFlying() == flying && p.getTeam() == team) == 0 && flying) continue;
 
-            drawAndInterpolate(unitGroups[team.ordinal()], u -> u.isFlying() == flying && !u.isDead(), Unit::drawUnder);
-            drawAndInterpolate(playerGroup, p -> p.isFlying() == flying && p.getTeam() == team && !p.isDead(), Unit::drawUnder);
+            draw(unitGroups[team.ordinal()], u -> u.isFlying() == flying && !u.isDead(), Unit::drawUnder);
+            draw(playerGroup, p -> p.isFlying() == flying && p.getTeam() == team && !p.isDead(), Unit::drawUnder);
 
-            drawAndInterpolate(unitGroups[team.ordinal()], u -> u.isFlying() == flying && !u.isDead(), Unit::drawAll);
-            drawAndInterpolate(playerGroup, p -> p.isFlying() == flying && p.getTeam() == team, Unit::drawAll);
-            blocks.drawTeamBlocks(Layer.turret, team);
+            draw(unitGroups[team.ordinal()], u -> u.isFlying() == flying && !u.isDead(), Unit::drawAll);
+            draw(playerGroup, p -> p.isFlying() == flying && p.getTeam() == team, Unit::drawAll);
 
-            drawAndInterpolate(unitGroups[team.ordinal()], u -> u.isFlying() == flying && !u.isDead(), Unit::drawOver);
-            drawAndInterpolate(playerGroup, p -> p.isFlying() == flying && p.getTeam() == team, Unit::drawOver);
+            draw(unitGroups[team.ordinal()], u -> u.isFlying() == flying && !u.isDead(), Unit::drawOver);
+            draw(playerGroup, p -> p.isFlying() == flying && p.getTeam() == team, Unit::drawOver);
         }
     }
 
-    public <T extends DrawTrait> void drawAndInterpolate(EntityGroup<T> group){
-        drawAndInterpolate(group, t -> true, DrawTrait::draw);
+    public <T extends DrawTrait> void draw(EntityGroup<T> group){
+        draw(group, t -> true, DrawTrait::draw);
     }
 
-    public <T extends DrawTrait> void drawAndInterpolate(EntityGroup<T> group, Predicate<T> toDraw){
-        drawAndInterpolate(group, toDraw, DrawTrait::draw);
+    public <T extends DrawTrait> void draw(EntityGroup<T> group, Predicate<T> toDraw){
+        draw(group, toDraw, DrawTrait::draw);
     }
 
-    public <T extends DrawTrait> void drawAndInterpolate(EntityGroup<T> group, Predicate<T> toDraw, Consumer<T> drawer){
-        EntityDraw.drawWith(group, toDraw, drawer);
+    public <T extends DrawTrait> void draw(EntityGroup<T> group, Predicate<T> toDraw, Consumer<T> drawer){
+        Entities.draw(group, toDraw, drawer);
     }
 
     public void scaleCamera(float amount){
@@ -298,7 +356,7 @@ public class Renderer implements ApplicationListener{
     }
 
     public void clampScale(){
-        float s = io.anuke.arc.scene.ui.layout.Unit.dp.scl(1f);
+        float s = UnitScl.dp.scl(1f);
         targetscale = Mathf.clamp(targetscale, s * 1.5f, Math.round(s * 6));
     }
 

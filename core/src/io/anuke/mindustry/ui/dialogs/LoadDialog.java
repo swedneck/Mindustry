@@ -1,20 +1,20 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.scene.ui.ScrollPane;
-import io.anuke.arc.scene.ui.TextButton;
-import io.anuke.arc.scene.ui.layout.Table;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.core.Platform;
-import io.anuke.mindustry.game.Saves.SaveSlot;
-import io.anuke.mindustry.io.SaveIO;
-import io.anuke.mindustry.io.SaveIO.SaveException;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.core.*;
+import io.anuke.mindustry.game.Saves.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.io.SaveIO.*;
+import io.anuke.mindustry.net.Net;
 
-import java.io.IOException;
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -65,44 +65,44 @@ public class LoadDialog extends FloatingDialog{
             button.table(t -> {
                 t.right();
 
-                t.addImageButton("icon-floppy", "emptytoggle", 14 * 3, () -> {
+                t.addImageButton("icon-floppy", "emptytoggle", iconsize, () -> {
                     slot.setAutosave(!slot.isAutosave());
                 }).checked(slot.isAutosave()).right();
 
-                t.addImageButton("icon-trash", "empty", 14 * 3, () -> {
+                t.addImageButton("icon-trash", "empty", iconsize, () -> {
                     ui.showConfirm("$confirm", "$save.delete.confirm", () -> {
                         slot.delete();
                         setup();
                     });
-                }).size(14 * 3).right();
+                }).size(iconsize).right();
 
-                t.addImageButton("icon-pencil-small", "empty", 14 * 3, () -> {
+                t.addImageButton("icon-pencil", "empty", iconsize, () -> {
                     ui.showTextInput("$save.rename", "$save.rename.text", slot.getName(), text -> {
                         slot.setName(text);
                         setup();
                     });
-                }).size(14 * 3).right();
+                }).size(iconsize).right();
 
-                t.addImageButton("icon-save", "empty", 14 * 3, () -> {
+                t.addImageButton("icon-save", "empty", iconsize, () -> {
                     if(!ios){
                         Platform.instance.showFileChooser(Core.bundle.get("save.export"), "Mindustry Save", file -> {
                             try{
                                 slot.exportFile(file);
                                 setup();
                             }catch(IOException e){
-                                ui.showError(Core.bundle.format("save.export.fail", Strings.parseException(e, false)));
+                                ui.showError(Core.bundle.format("save.export.fail", Strings.parseException(e, true)));
                             }
-                        }, false, saveExtension);
+                        }, false, FileChooser.saveFiles);
                     }else{
                         try{
                             FileHandle file = Core.files.local("save-" + slot.getName() + "." + Vars.saveExtension);
                             slot.exportFile(file);
                             Platform.instance.shareFile(file);
                         }catch(Exception e){
-                            ui.showError(Core.bundle.format("save.export.fail", Strings.parseException(e, false)));
+                            ui.showError(Core.bundle.format("save.export.fail", Strings.parseException(e, true)));
                         }
                     }
-                }).size(14 * 3).right();
+                }).size(iconsize).right();
 
 
             }).padRight(-10).growX();
@@ -137,7 +137,6 @@ public class LoadDialog extends FloatingDialog{
         for(SaveSlot slot : control.saves.getSaveSlots()) if(!slot.isHidden()) valids = true;
 
         if(!valids){
-
             slots.row();
             slots.addButton("$save.none", () -> {
             }).disabled(true).fillX().margin(20f).minWidth(340f).height(80f).pad(4f);
@@ -147,7 +146,7 @@ public class LoadDialog extends FloatingDialog{
 
         if(ios) return;
 
-        slots.addImageTextButton("$save.import", "icon-add", 14 * 3, () -> {
+        slots.addImageTextButton("$save.import", "icon-add", iconsize, () -> {
             Platform.instance.showFileChooser(Core.bundle.get("save.import"), "Mindustry Save", file -> {
                 if(SaveIO.isSaveValid(file)){
                     try{
@@ -155,12 +154,12 @@ public class LoadDialog extends FloatingDialog{
                         setup();
                     }catch(IOException e){
                         e.printStackTrace();
-                        ui.showError(Core.bundle.format("save.import.fail", Strings.parseException(e, false)));
+                        ui.showError(Core.bundle.format("save.import.fail", Strings.parseException(e, true)));
                     }
                 }else{
                     ui.showError("$save.import.invalid");
                 }
-            }, true, saveExtension);
+            }, true, FileChooser.saveFiles);
         }).fillX().margin(10f).minWidth(300f).height(70f).pad(4f).padRight(-4);
     }
 
@@ -170,6 +169,7 @@ public class LoadDialog extends FloatingDialog{
 
         ui.loadAnd(() -> {
             try{
+                Net.reset();
                 slot.load();
                 state.set(State.playing);
             }catch(SaveException e){
@@ -184,13 +184,7 @@ public class LoadDialog extends FloatingDialog{
     public void modifyButton(TextButton button, SaveSlot slot){
         button.clicked(() -> {
             if(!button.childrenPressed()){
-                int build = slot.getBuild();
-                if(SaveIO.breakingVersions.contains(build)){
-                    ui.showInfo("$save.old");
-                    slot.delete();
-                }else{
-                    runLoadSave(slot);
-                }
+                runLoadSave(slot);
             }
         });
     }

@@ -1,33 +1,30 @@
 package io.anuke.mindustry.maps;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.ObjectMap;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.graphics.Texture;
-import io.anuke.arc.util.Disposable;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.serialization.Json;
-import io.anuke.mindustry.game.SpawnGroup;
-import io.anuke.mindustry.io.MapIO;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.function.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.serialization.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.maps.filters.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.storage.*;
 
-import java.io.IOException;
-import java.io.StringWriter;
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class Maps implements Disposable{
     /** List of all built-in maps. Filenames only. */
-    private static final String[] defaultMapNames = {"fortress"};
+    private static String[] defaultMapNames = {"maze", "fortress", "labyrinth", "islands", "tendrils", "caldera", "wasteland", "shattered", "fork", "triad", "veins", "glacier"};
     /** All maps stored in an ordered array. */
     private Array<Map> maps = new Array<>();
     /** Serializer for meta. */
     private Json json = new Json();
-
-    public Maps(){
-
-    }
 
     /** Returns a list of all maps, including custom ones. */
     public Array<Map> all(){
@@ -56,7 +53,7 @@ public class Maps implements Disposable{
         FileHandle file = Core.files.internal("maps/" + name + "." + mapExtension);
 
         try{
-            return MapIO.readMap(file, false);
+            return MapIO.createMap(file, false);
         }catch(IOException e){
             throw new RuntimeException(e);
         }
@@ -85,13 +82,12 @@ public class Maps implements Disposable{
      * Save a custom map to the directory. This updates all values and stored data necessary.
      * The tags are copied to prevent mutation later.
      */
-    public void saveMap(ObjectMap<String, String> baseTags, Tile[][] data){
+    public void saveMap(ObjectMap<String, String> baseTags){
 
         try{
-            ObjectMap<String, String> tags = new ObjectMap<>(baseTags);
+            StringMap tags = new StringMap(baseTags);
             String name = tags.get("name");
             if(name == null) throw new IllegalArgumentException("Can't save a map with no name. How did this happen?");
-            //FileHandle file = customMapDirectory.child(name + "." + mapExtension);
             FileHandle file;
 
             //find map with the same exact display name
@@ -110,11 +106,29 @@ public class Maps implements Disposable{
             }
 
             //create map, write it, etc etc etc
-            Map map = new Map(file, data.length, data[0].length, tags, true);
-            MapIO.writeMap(file, map, data);
+            Map map = new Map(file, world.width(), world.height(), tags, true);
+            MapIO.writeMap(file, map);
 
             if(!headless){
-                map.texture = new Texture(MapIO.generatePreview(data));
+                //reset attributes
+                map.teams.clear();
+                map.spawns = 0;
+
+                for(int x = 0; x < map.width; x++){
+                    for(int y = 0; y < map.height; y++){
+                        Tile tile = world.getTiles()[x][y];
+
+                        if(tile.block() instanceof CoreBlock){
+                            map.teams.add(tile.getTeamID());
+                        }
+
+                        if(tile.overlay() == Blocks.spawn){
+                            map.spawns ++;
+                        }
+                    }
+                }
+
+                map.texture = new Texture(MapIO.generatePreview(world.getTiles()));
             }
             maps.add(map);
             maps.sort();
@@ -123,12 +137,38 @@ public class Maps implements Disposable{
         }
     }
 
+    /** Creates a legacy map by converting it to a non-legacy map and pasting it in a temp directory.
+     * Should be followed up by {@link #importMap(FileHandle)} .*/
+    public Map makeLegacyMap(FileHandle file) throws IOException{
+        FileHandle dst = tmpDirectory.child("conversion_map." + mapExtension);
+        LegacyMapIO.convertMap(file, dst);
+        return MapIO.createMap(dst, true);
+    }
+
     /** Import a map, then save it. This updates all values and stored data necessary. */
     public void importMap(FileHandle file) throws IOException{
         FileHandle dest = findFile();
         file.copyTo(dest);
 
         loadMap(dest, true);
+    }
+
+    /** Attempts to run the following code;
+     * catches any errors and attempts to display them in a readable way.*/
+    public void tryCatchMapError(ExceptionRunnable run){
+        try{
+            run.run();
+        }catch(Exception e){
+            Log.err(e);
+
+            if("Outdated legacy map format".equals(e.getMessage())){
+                ui.showError("$editor.errorlegacy");
+            }else if(e.getMessage() != null && e.getMessage().contains("Incorrect header!")){
+                ui.showError("$editor.errorheader");
+            }else{
+                ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, true)));
+            }
+        }
     }
 
     /** Removes a map completely. */
@@ -140,6 +180,53 @@ public class Maps implements Disposable{
 
         maps.remove(map);
         map.file.delete();
+    }
+
+    /** Reads JSON of filters, returning a new default array if not found.*/
+    @SuppressWarnings("unchecked")
+    public Array<GenerateFilter> readFilters(String str){
+        if(str == null || str.isEmpty()){
+            //create default filters list
+            Array<GenerateFilter> filters =  Array.with(
+                new ScatterFilter(){{
+                    flooronto = Blocks.stone;
+                    block = Blocks.rock;
+                }},
+                new ScatterFilter(){{
+                    flooronto = Blocks.shale;
+                    block = Blocks.shaleBoulder;
+                }},
+                new ScatterFilter(){{
+                    flooronto = Blocks.snow;
+                    block = Blocks.snowrock;
+                }},
+                new ScatterFilter(){{
+                    flooronto = Blocks.ice;
+                    block = Blocks.snowrock;
+                }},
+                new ScatterFilter(){{
+                    flooronto = Blocks.sand;
+                    block = Blocks.sandBoulder;
+                }}
+            );
+
+            addDefaultOres(filters);
+
+            return filters;
+        }else{
+            return JsonIO.read(Array.class, str);
+        }
+    }
+
+    public void addDefaultOres(Array<GenerateFilter> filters){
+        int index = 0;
+        for(Block block : new Block[]{Blocks.oreCopper, Blocks.oreLead, Blocks.oreCoal, Blocks.oreTitanium, Blocks.oreThorium}){
+            OreFilter filter = new OreFilter();
+            filter.threshold += index ++ * 0.019f;
+            filter.scl += index/2f;
+            filter.ore = block;
+            filters.add(filter);
+        }
     }
 
     public String writeWaves(Array<SpawnGroup> groups){
@@ -164,6 +251,34 @@ public class Maps implements Disposable{
         return str == null ? null : str.equals("[]") ? new Array<>() : Array.with(json.fromJson(SpawnGroup[].class, str));
     }
 
+    public void loadLegacyMaps(){
+        boolean convertedAny = false;
+        for(FileHandle file : customMapDirectory.list()){
+            if(file.extension().equalsIgnoreCase(oldMapExtension)){
+                try{
+                    convertedAny = true;
+                    LegacyMapIO.convertMap(file, file.sibling(file.nameWithoutExtension() + "." + mapExtension));
+                    //delete old, converted file; it is no longer useful
+                    file.delete();
+                    Log.info("Converted file {0}", file);
+                }catch(Exception e){
+                    //rename the file to a 'mmap_conversion_failed' extension to keep it there just in case
+                    //but don't delete it
+                    file.copyTo(file.sibling(file.name() + "_conversion_failed"));
+                    file.delete();
+                    Log.err(e);
+                }
+            }
+        }
+
+        //free up any potential memory that was used up during conversion
+        if(convertedAny){
+            world.createTiles(1, 1);
+            //reload maps to load the converted ones
+            reload();
+        }
+    }
+
     /** Find a new filename to put a map to. */
     private FileHandle findFile(){
         //find a map name that isn't used.
@@ -175,7 +290,7 @@ public class Maps implements Disposable{
     }
 
     private void loadMap(FileHandle file, boolean custom) throws IOException{
-        Map map = MapIO.readMap(file, custom);
+        Map map = MapIO.createMap(file, custom);
 
         if(map.name() == null){
             throw new IOException("Map name cannot be empty! File: " + file);
@@ -186,7 +301,7 @@ public class Maps implements Disposable{
         }
 
         maps.add(map);
-        maps.sort();
+        //maps.sort();
     }
 
     private void loadCustomMaps(){

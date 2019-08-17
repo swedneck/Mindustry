@@ -1,23 +1,12 @@
 package io.anuke.mindustry.desktop;
 
-import io.anuke.arc.ApplicationListener;
-import io.anuke.arc.Settings;
 import io.anuke.arc.backends.lwjgl3.Lwjgl3Application;
 import io.anuke.arc.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.util.OS;
 import io.anuke.mindustry.Mindustry;
-import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.core.Platform;
-import io.anuke.mindustry.net.Net;
-import io.anuke.net.KryoClient;
-import io.anuke.net.KryoServer;
+import io.anuke.mindustry.net.*;
 
-public class DesktopLauncher extends Lwjgl3Application{
-
-    public DesktopLauncher(ApplicationListener listener, Lwjgl3ApplicationConfiguration config){
-        super(listener, config);
-    }
+public class DesktopLauncher{
 
     public static void main(String[] arg){
         try{
@@ -25,31 +14,16 @@ public class DesktopLauncher extends Lwjgl3Application{
             config.setTitle("Mindustry");
             config.setMaximized(true);
             config.setBackBufferConfig(8, 8, 8, 8, 0, 0, 0);
-            config.setWindowedMode(960, 540);
-            config.setWindowIcon("sprites/icon.png");
-
-            try{
-                Settings settings = new Settings(){
-                    @Override
-                    public FileHandle getDataDirectory(){
-                        return dataDirectory == null ? new FileHandle(OS.getAppDataDirectoryString(appName)) : dataDirectory;
-                    }
-                };
-                settings.setAppName(Vars.appName);
-                settings.loadValues();
-                int level = settings.getInt("antialias", 0);
-                config.setBackBufferConfig(8, 8, 8, 8, 0, 0, level == 0 ? 0 : 1 << level);
-            }catch(Throwable t){
-                t.printStackTrace();
-            }
+            config.setWindowedMode(900, 600);
+            config.setWindowIcon("icons/icon_64.png");
 
             Platform.instance = new DesktopPlatform(arg);
 
-            Net.setClientProvider(new KryoClient());
-            Net.setServerProvider(new KryoServer());
-            new DesktopLauncher(new Mindustry(), config);
+            Net.setClientProvider(new ArcNetClient());
+            Net.setServerProvider(new ArcNetServer());
+            new Lwjgl3Application(new Mindustry(), config);
         }catch(Throwable e){
-            CrashHandler.handle(e);
+            DesktopPlatform.handleCrash(e);
         }
     }
 }

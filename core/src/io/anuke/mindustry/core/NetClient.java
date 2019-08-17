@@ -7,7 +7,7 @@ import io.anuke.arc.collection.IntSet;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.math.RandomXS128;
 import io.anuke.arc.util.*;
-import io.anuke.arc.util.io.ReusableByteArrayInputStream;
+import io.anuke.arc.util.io.ReusableByteInStream;
 import io.anuke.arc.util.serialization.Base64Coder;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.core.GameState.State;
@@ -15,14 +15,17 @@ import io.anuke.mindustry.entities.Entities;
 import io.anuke.mindustry.entities.EntityGroup;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
 import io.anuke.mindustry.entities.traits.SyncTrait;
-import io.anuke.mindustry.entities.traits.TypeTrait;
 import io.anuke.mindustry.entities.type.Player;
+import io.anuke.mindustry.entities.type.Unit;
+import io.anuke.mindustry.game.TypeID;
 import io.anuke.mindustry.game.Version;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.gen.RemoteReadClient;
+import io.anuke.mindustry.net.Administration.TraceInfo;
 import io.anuke.mindustry.net.*;
 import io.anuke.mindustry.net.Net.SendMode;
 import io.anuke.mindustry.net.Packets.*;
+import io.anuke.mindustry.type.ContentType;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.modules.ItemModule;
 
@@ -42,6 +45,8 @@ public class NetClient implements ApplicationListener{
     private boolean connecting = false;
     /** If true, no message will be shown on disconnect. */
     private boolean quiet = false;
+    /** Whether to supress disconnect events completely.*/
+    private boolean quietReset = false;
     /** Counter for data timeout. */
     private float timeoutTime = 0f;
     /** Last sent client snapshot ID. */
@@ -50,7 +55,7 @@ public class NetClient implements ApplicationListener{
     /** List of entities that were removed, and need not be added while syncing. */
     private IntSet removed = new IntSet();
     /** Byte stream for reading in snapshots. */
-    private ReusableByteArrayInputStream byteStream = new ReusableByteArrayInputStream();
+    private ReusableByteInStream byteStream = new ReusableByteInStream();
     private DataInputStream dataStream = new DataInputStream(byteStream);
 
     public NetClient(){
@@ -91,8 +96,11 @@ public class NetClient implements ApplicationListener{
         });
 
         Net.handleClient(Disconnect.class, packet -> {
-            state.set(State.menu);
+            if(quietReset) return;
+
             connecting = false;
+            state.set(State.menu);
+            logic.reset();
             Platform.instance.updateRPC();
 
             if(quiet) return;
@@ -116,7 +124,7 @@ public class NetClient implements ApplicationListener{
     }
 
     //called on all clients
-    @Remote(called = Loc.server, targets = Loc.server)
+    @Remote(called = Loc.server, targets = Loc.server, variants = Variant.both)
     public static void sendMessage(String message, String sender, Player playersender){
         if(Vars.ui != null){
             Vars.ui.chatfrag.addMessage(message, sender);
@@ -157,10 +165,18 @@ public class NetClient implements ApplicationListener{
         return "[#" + player.color.toString().toUpperCase() + "]" + name;
     }
 
+    @Remote(variants = Variant.one)
+    public static void onTraceInfo(Player player, TraceInfo info){
+        if(player != null){
+            ui.traces.show(player, info);
+        }
+    }
+
     @Remote(variants = Variant.one, priority = PacketPriority.high)
     public static void onKick(KickReason reason){
         netClient.disconnectQuietly();
         state.set(State.menu);
+        logic.reset();
 
         if(!reason.quiet){
             if(reason.extraText() != null){
@@ -181,6 +197,7 @@ public class NetClient implements ApplicationListener{
     public static void onWorldDataBegin(){
         Entities.clear();
         netClient.removed.clear();
+        logic.reset();
 
         ui.chatfrag.clearMessages();
         Net.setClientLoaded(false);
@@ -219,8 +236,8 @@ public class NetClient implements ApplicationListener{
                 int id = input.readInt();
                 byte typeID = input.readByte();
 
-                SyncTrait entity = (SyncTrait)group.getByID(id);
-                boolean add = false;
+                SyncTrait entity = group == null ? null : (SyncTrait)group.getByID(id);
+                boolean add = false, created = false;
 
                 if(entity == null && id == player.id){
                     entity = player;
@@ -229,15 +246,24 @@ public class NetClient implements ApplicationListener{
 
                 //entity must not be added yet, so create it
                 if(entity == null){
-                    entity = (SyncTrait)TypeTrait.getTypeByID(typeID).get(); //create entity from supplier
+                    entity = (SyncTrait)content.<TypeID>getByID(ContentType.typeid, typeID).constructor.get();
                     entity.resetID(id);
                     if(!netClient.isEntityUsed(entity.getID())){
                         add = true;
                     }
+                    created = true;
                 }
 
                 //read the entity
                 entity.read(input);
+
+                if(created && entity.getInterpolator() != null && entity.getInterpolator().target != null){
+                    //set initial starting position
+                    entity.setNet(entity.getInterpolator().target.x, entity.getInterpolator().target.y);
+                    if(entity instanceof Unit && entity.getInterpolator().targets.length > 0){
+                        ((Unit)entity).rotation = entity.getInterpolator().targets[0];
+                    }
+                }
 
                 if(add){
                     entity.add();
@@ -304,11 +330,11 @@ public class NetClient implements ApplicationListener{
     private void finishConnecting(){
         state.set(State.playing);
         connecting = false;
-        ui.loadfrag.hide();
         ui.join.hide();
         Net.setClientLoaded(true);
         Core.app.post(Call::connectConfirm);
         Time.runTask(40f, Platform.instance::updateRPC);
+        Core.app.post(() -> ui.loadfrag.hide());
     }
 
     private void reset(){
@@ -316,6 +342,7 @@ public class NetClient implements ApplicationListener{
         removed.clear();
         timeoutTime = 0f;
         connecting = true;
+        quietReset = false;
         quiet = false;
         lastSent = 0;
 
@@ -327,8 +354,15 @@ public class NetClient implements ApplicationListener{
         connecting = true;
     }
 
+    /** Disconnects, resetting state to the menu. */
     public void disconnectQuietly(){
         quiet = true;
+        Net.disconnect();
+    }
+
+    /** Disconnects, causing no further changes or reset.*/
+    public void disconnectNoReset(){
+        quiet = quietReset = true;
         Net.disconnect();
     }
 
@@ -350,11 +384,11 @@ public class NetClient implements ApplicationListener{
         if(timer.get(0, playerSyncTime)){
             BuildRequest[] requests;
             //limit to 10 to prevent buffer overflows
-            int usedRequests = Math.min(player.getPlaceQueue().size, 10);
+            int usedRequests = Math.min(player.buildQueue().size, 10);
 
             requests = new BuildRequest[usedRequests];
             for(int i = 0; i < usedRequests; i++){
-                requests[i] = player.getPlaceQueue().get(i);
+                requests[i] = player.buildQueue().get(i);
             }
 
             Call.onClientShapshot(lastSent++, player.x, player.y,

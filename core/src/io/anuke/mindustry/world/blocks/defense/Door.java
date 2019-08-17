@@ -1,20 +1,21 @@
 package io.anuke.mindustry.world.blocks.defense;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Graphics.Cursor;
-import io.anuke.arc.Graphics.Cursor.SystemCursor;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.geom.Rectangle;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Effects.Effect;
-import io.anuke.mindustry.entities.Units;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.Graphics.*;
+import io.anuke.arc.Graphics.Cursor.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.Effects.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.world.*;
 
 import java.io.*;
+
+import static io.anuke.mindustry.Vars.world;
 
 public class Door extends Wall{
     protected final Rectangle rect = new Rectangle();
@@ -29,6 +30,23 @@ public class Door extends Wall{
         solid = false;
         solidifes = true;
         consumesTap = true;
+    }
+
+    @Remote(called = Loc.server)
+    public static void onDoorToggle(Player player, Tile tile, boolean open){
+        DoorEntity entity = tile.entity();
+        if(entity != null){
+            entity.open = open;
+            Door door = (Door)tile.block();
+
+            world.pathfinder.updateSolid(tile);
+            if(!entity.open){
+                Effects.effect(door.openfx, tile.drawx(), tile.drawy());
+            }else{
+                Effects.effect(door.closefx, tile.drawx(), tile.drawy());
+            }
+            Sounds.door.at(tile);
+        }
     }
 
     @Override
@@ -67,12 +85,7 @@ public class Door extends Wall{
             return;
         }
 
-        entity.open = !entity.open;
-        if(!entity.open){
-            Effects.effect(closefx, tile.drawx(), tile.drawy());
-        }else{
-            Effects.effect(openfx, tile.drawx(), tile.drawy());
-        }
+        Call.onDoorToggle(null, tile, !entity.open);
     }
 
     @Override
@@ -85,11 +98,13 @@ public class Door extends Wall{
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeBoolean(open);
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             open = stream.readBoolean();
         }
     }

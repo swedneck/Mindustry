@@ -20,6 +20,7 @@ public class MindustryServer extends ApplicationCore{
     @Override
     public void setup(){
         Core.settings.setDataDirectory(Core.files.local("config"));
+        loadLocales = false;
         Vars.init();
 
         headless = true;

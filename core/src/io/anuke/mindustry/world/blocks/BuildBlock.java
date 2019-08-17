@@ -1,7 +1,6 @@
 package io.anuke.mindustry.world.blocks;
 
-import io.anuke.annotations.Annotations.Loc;
-import io.anuke.annotations.Annotations.Remote;
+import io.anuke.annotations.Annotations.*;
 import io.anuke.arc.Core;
 import io.anuke.arc.Events;
 import io.anuke.arc.Graphics.Cursor;
@@ -16,7 +15,7 @@ import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
 import io.anuke.mindustry.entities.type.*;
 import io.anuke.mindustry.game.EventType.BlockBuildEndEvent;
 import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.gen.Call;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.graphics.*;
 import io.anuke.mindustry.type.ItemStack;
 import io.anuke.mindustry.world.Block;
@@ -28,15 +27,25 @@ import java.io.*;
 import static io.anuke.mindustry.Vars.*;
 
 public class BuildBlock extends Block{
+    public static final int maxSize = 9;
+    private static final BuildBlock[] buildBlocks = new BuildBlock[maxSize];
 
-    public BuildBlock(String name){
-        super(name);
+    public BuildBlock(int size){
+        super("build" + size);
+        this.size = size;
         update = true;
-        size = Integer.parseInt(name.charAt(name.length() - 1) + "");
         health = 20;
         layer = Layer.placement;
         consumesTap = true;
         solidifes = true;
+
+        buildBlocks[size - 1] = this;
+    }
+
+    /** Returns a BuildBlock by size. */
+    public static BuildBlock get(int size){
+        if(size > maxSize) throw new IllegalArgumentException("No. Don't place BuildBlocks of size greater than " + maxSize);
+        return buildBlocks[size - 1];
     }
 
     @Remote(called = Loc.server)
@@ -45,6 +54,7 @@ public class BuildBlock extends Block{
         Effects.effect(Fx.breakBlock, tile.drawx(), tile.drawy(), block.size);
         world.removeBlock(tile);
         Events.fire(new BlockBuildEndEvent(tile, team, true));
+        Sounds.breaks.at(tile, Mathf.random(0.7f, 1.4f));
     }
 
     @Remote(called = Loc.server)
@@ -65,6 +75,7 @@ public class BuildBlock extends Block{
             Core.app.post(() -> tile.block().playerPlaced(tile));
         }
         Core.app.post(() -> Events.fire(new BlockBuildEndEvent(tile, team, false)));
+        Sounds.place.at(tile, Mathf.random(0.7f, 1.4f));
     }
 
     @Override
@@ -102,7 +113,7 @@ public class BuildBlock extends Block{
         //if the target is constructible, begin constructing
         if(entity.cblock != null){
             player.clearBuilding();
-            player.addBuildRequest(new BuildRequest(tile.x, tile.y, tile.getRotation(), entity.cblock));
+            player.addBuildRequest(new BuildRequest(tile.x, tile.y, tile.rotation(), entity.cblock));
         }
     }
 
@@ -127,7 +138,7 @@ public class BuildBlock extends Block{
         if(entity.previous == null) return;
 
         if(Core.atlas.isFound(entity.previous.icon(Icon.full))){
-            Draw.rect(entity.previous.icon(Icon.full), tile.drawx(), tile.drawy(), entity.previous.rotate ? tile.getRotation() * 90 : 0);
+            Draw.rect(entity.previous.icon(Icon.full), tile.drawx(), tile.drawy(), entity.previous.rotate ? tile.rotation() * 90 : 0);
         }
     }
 
@@ -146,7 +157,7 @@ public class BuildBlock extends Block{
             Shaders.blockbuild.region = region;
             Shaders.blockbuild.progress = entity.progress;
 
-            Draw.rect(region, tile.drawx(), tile.drawy(), target.rotate ? tile.getRotation() * 90 : 0);
+            Draw.rect(region, tile.drawx(), tile.drawy(), target.rotate ? tile.rotation() * 90 : 0);
             Draw.flush();
         }
     }
@@ -161,7 +172,7 @@ public class BuildBlock extends Block{
          * The recipe of the block that is being constructed.
          * If there is no recipe for this block, as is the case with rocks, 'previous' is used.
          */
-        public Block cblock;
+        public @Nullable Block cblock;
 
         public float progress = 0;
         public float buildCost;
@@ -175,13 +186,13 @@ public class BuildBlock extends Block{
         private float[] accumulator;
         private float[] totalAccumulator;
 
-        public void construct(Unit builder, TileEntity core, float amount){
+        public void construct(Unit builder, @Nullable TileEntity core, float amount){
             if(cblock == null){
                 kill();
                 return;
             }
 
-            float maxProgress = checkRequired(core.items, amount, false);
+            float maxProgress = core == null ? amount : checkRequired(core.items, amount, false);
 
             for(int i = 0; i < cblock.buildRequirements.length; i++){
                 int reqamount = Math.round(state.rules.buildCostMultiplier * cblock.buildRequirements[i].amount);
@@ -189,7 +200,7 @@ public class BuildBlock extends Block{
                 totalAccumulator[i] = Math.min(totalAccumulator[i] + reqamount * maxProgress, reqamount);
             }
 
-            maxProgress = checkRequired(core.items, maxProgress, true);
+            maxProgress = core == null ? maxProgress : checkRequired(core.items, maxProgress, true);
 
             progress = Mathf.clamp(progress + maxProgress);
 
@@ -198,11 +209,11 @@ public class BuildBlock extends Block{
             }
 
             if(progress >= 1f || state.rules.infiniteResources){
-                Call.onConstructFinish(tile, cblock, builderID, tile.getRotation(), builder.getTeam());
+                Call.onConstructFinish(tile, cblock, builderID, tile.rotation(), builder.getTeam());
             }
         }
 
-        public void deconstruct(Unit builder, TileEntity core, float amount){
+        public void deconstruct(Unit builder, @Nullable TileEntity core, float amount){
             float deconstructMultiplier = 0.5f;
 
             if(cblock != null){
@@ -211,18 +222,24 @@ public class BuildBlock extends Block{
                     setDeconstruct(previous);
                 }
 
+                //make sure you take into account that you can't deconstruct more than there is deconstructed
+                float clampedAmount = Math.min(amount, progress);
+
                 for(int i = 0; i < requirements.length; i++){
                     int reqamount = Math.round(state.rules.buildCostMultiplier * requirements[i].amount);
-                    accumulator[i] += Math.min(amount * deconstructMultiplier * reqamount, deconstructMultiplier * reqamount - totalAccumulator[i]); //add scaled amount progressed to the accumulator
-                    totalAccumulator[i] = Math.min(totalAccumulator[i] + reqamount * amount * deconstructMultiplier, reqamount);
+                    accumulator[i] += Math.min(clampedAmount * deconstructMultiplier * reqamount, deconstructMultiplier * reqamount - totalAccumulator[i]); //add scaled amount progressed to the accumulator
+                    totalAccumulator[i] = Math.min(totalAccumulator[i] + reqamount * clampedAmount * deconstructMultiplier, reqamount);
 
                     int accumulated = (int)(accumulator[i]); //get amount
 
-                    if(amount > 0 && accumulated > 0){ //if it's positive, add it to the core
-                        int accepting = core.tile.block().acceptStack(requirements[i].item, accumulated, core.tile, builder);
-                        core.tile.block().handleStack(requirements[i].item, accepting, core.tile, builder);
-
-                        accumulator[i] -= accepting;
+                    if(clampedAmount > 0 && accumulated > 0){ //if it's positive, add it to the core
+                        if(core != null){
+                            int accepting = core.tile.block().acceptStack(requirements[i].item, accumulated, core.tile, builder);
+                            core.tile.block().handleStack(requirements[i].item, accepting, core.tile, builder);
+                            accumulator[i] -= accepting;
+                        }else{
+                            accumulator[i] -= accumulated;
+                        }
                     }
                 }
             }
@@ -292,6 +309,7 @@ public class BuildBlock extends Block{
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeFloat(progress);
             stream.writeShort(previous == null ? -1 : previous.id);
             stream.writeShort(cblock == null ? -1 : cblock.id);
@@ -308,7 +326,8 @@ public class BuildBlock extends Block{
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             progress = stream.readFloat();
             short pid = stream.readShort();
             short rid = stream.readShort();

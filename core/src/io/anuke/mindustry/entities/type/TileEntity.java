@@ -1,33 +1,26 @@
 package io.anuke.mindustry.entities.type;
 
-import io.anuke.annotations.Annotations.Loc;
-import io.anuke.annotations.Annotations.Remote;
+import io.anuke.annotations.Annotations.*;
 import io.anuke.arc.Events;
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.ObjectSet;
-import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Point2;
 import io.anuke.arc.math.geom.Vector2;
-import io.anuke.arc.util.Interval;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.entities.EntityGroup;
 import io.anuke.mindustry.entities.bullet.Bullet;
 import io.anuke.mindustry.entities.impl.BaseEntity;
 import io.anuke.mindustry.entities.traits.HealthTrait;
 import io.anuke.mindustry.entities.traits.TargetTrait;
+import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.game.EventType.BlockDestroyEvent;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.gen.Call;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.world.*;
-import io.anuke.mindustry.world.blocks.defense.Wall;
 import io.anuke.mindustry.world.modules.*;
 
 import java.io.*;
 
-import static io.anuke.mindustry.Vars.tileGroup;
-import static io.anuke.mindustry.Vars.world;
+import static io.anuke.mindustry.Vars.*;
 
 public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
     public static final float timeToSleep = 60f * 4; //4 seconds to fall asleep
@@ -51,6 +44,7 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
     private boolean dead = false;
     private boolean sleeping;
     private float sleepTime;
+    private @Nullable SoundLoop sound;
 
     @Remote(called = Loc.server, unreliable = true)
     public static void onTileDamage(Tile tile, float health){
@@ -75,6 +69,9 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
         x = tile.drawx();
         y = tile.drawy();
         block = tile.block();
+        if(block.activeSound != Sounds.none){
+            sound = new SoundLoop(block.activeSound, block.activeSoundVolume);
+        }
 
         health = block.health;
         timer = new Interval(block.timers);
@@ -119,16 +116,35 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
         return dead || tile.entity != this;
     }
 
+    @CallSuper
     public void write(DataOutput stream) throws IOException{
+        stream.writeShort((short)health);
+        stream.writeByte(Pack.byteByte(tile.getTeamID(), tile.rotation())); //team + rotation
+        if(items != null) items.write(stream);
+        if(power != null) power.write(stream);
+        if(liquids != null) liquids.write(stream);
+        if(cons != null) cons.write(stream);
     }
 
-    public void writeConfig(DataOutput stream) throws IOException{
+    @CallSuper
+    public void read(DataInput stream, byte revision) throws IOException{
+        health = stream.readUnsignedShort();
+        byte tr = stream.readByte();
+        byte team = Pack.leftByte(tr);
+        byte rotation = Pack.rightByte(tr);
+
+        tile.setTeam(Team.all[team]);
+        tile.rotation(rotation);
+
+        if(items != null) items.read(stream);
+        if(power != null) power.read(stream);
+        if(liquids != null) liquids.read(stream);
+        if(cons != null) cons.read(stream);
     }
 
-    public void read(DataInput stream) throws IOException{
-    }
-
-    public void readConfig(DataInput stream) throws IOException{
+    /** Returns the version of this TileEntity IO code.*/
+    public byte version(){
+        return 0;
     }
 
     public boolean collide(Bullet other){
@@ -172,14 +188,14 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
 
         Point2[] nearby = Edges.getEdges(block.size);
         for(Point2 point : nearby){
-            Tile other = world.tile(tile.x + point.x, tile.y + point.y);
+            Tile other = world.ltile(tile.x + point.x, tile.y + point.y);
             //remove this tile from all nearby tile's proximities
             if(other != null){
-                other = other.target();
                 other.block().onProximityUpdate(other);
-            }
-            if(other != null && other.entity != null){
-                other.entity.proximity.removeValue(tile, true);
+
+                if(other.entity != null){
+                    other.entity.proximity.removeValue(tile, true);
+                }
             }
         }
     }
@@ -190,10 +206,9 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
 
         Point2[] nearby = Edges.getEdges(block.size);
         for(Point2 point : nearby){
-            Tile other = world.tile(tile.x + point.x, tile.y + point.y);
+            Tile other = world.ltile(tile.x + point.x, tile.y + point.y);
 
             if(other == null) continue;
-            other = other.target();
             if(other.entity == null || !(other.interactable(tile.getTeam()))) continue;
 
             other.block().onProximityUpdate(other);
@@ -217,6 +232,13 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
 
     public Array<Tile> proximity(){
         return proximity;
+    }
+
+    @Override
+    public void removed(){
+        if(sound != null){
+            sound.stop();
+        }
     }
 
     @Override
@@ -245,9 +267,9 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
             dead = true;
 
             Events.fire(new BlockDestroyEvent(tile));
+            block.breakSound.at(tile);
             block.onDestroyed(tile);
             world.removeBlock(tile);
-            block.afterDestroyed(tile, this);
             remove();
         }
     }
@@ -264,12 +286,6 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
 
     @Override
     public void update(){
-        //TODO better smoke effect, this one is awful
-        if(health != 0 && health < block.health && !(block instanceof Wall) &&
-        Mathf.chance(0.009f * Time.delta() * (1f - health / block.health))){
-            Effects.effect(Fx.smoke, x + Mathf.range(4), y + Mathf.range(4));
-        }
-
         timeScaleDuration -= Time.delta();
         if(timeScaleDuration <= 0f || !block.canOverdrive){
             timeScale = 1f;
@@ -278,6 +294,14 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
         if(health <= 0){
             onDeath();
             return; //no need to update anymore
+        }
+
+        if(sound != null){
+            sound.update(x, y, block.shouldActiveSound(tile));
+        }
+
+        if(block.idleSound != Sounds.none && block.shouldIdleSound(tile)){
+            loops.play(block.idleSound, this, block.idleSoundVolume);
         }
 
         Block previous = block;
@@ -289,6 +313,11 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
         if(block == previous && power != null){
             power.graph.update();
         }
+    }
+
+    @Override
+    public boolean isValid(){
+        return !isDead() && tile.entity == this;
     }
 
     @Override
