@@ -1,6 +1,7 @@
 package io.anuke.mindustry.io;
 
 import io.anuke.arc.Core;
+import io.anuke.arc.Files.*;
 import io.anuke.arc.files.FileHandle;
 import io.anuke.arc.util.*;
 import io.anuke.mindustry.Vars;
@@ -8,7 +9,7 @@ import io.anuke.mindustry.input.Binding;
 
 import java.util.Locale;
 
-import static io.anuke.mindustry.Vars.headless;
+import static io.anuke.mindustry.Vars.*;
 
 public class BundleLoader{
 
@@ -54,6 +55,20 @@ public class BundleLoader{
             //no external bundle found
 
             FileHandle handle = Core.files.internal("bundles/bundle");
+
+            if(!mods.all().isEmpty()){
+                FileHandle base = handle;
+                handle = new FileHandle("bundles/bundle", FileType.Internal){
+                    @Override
+                    public FileHandle sibling(String name){
+                        if(modLocaleDirectory.child(name).exists()){
+                            return modLocaleDirectory.child(name);
+                        }else{
+                            return base.child(name);
+                        }
+                    }
+                };
+            }
 
             Locale locale = getLocale();
             Locale.setDefault(locale);

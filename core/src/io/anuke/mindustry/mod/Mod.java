@@ -1,12 +1,29 @@
 package io.anuke.mindustry.mod;
 
-import io.anuke.arc.files.FileHandle;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.mindustry.mod.Mods.*;
+
+import java.util.zip.*;
 
 public class Mod{
+    /** Metadata parsed from JSON.*/
     public final ModMeta meta;
+    /** Base class instance.*/
     public final ModBase listener;
+    /** Class to load mod from, extends BaseMod.*/
     public final Class<?> mainClass;
+    /** Local mod .jar file.*/
     public final FileHandle file;
+
+    /** All stream files inside the jar files. These only support read() and name().*/
+    public Array<ZipFileHandle> zipFiles = new Array<>();
+    /** Root zip file handle.*/
+    public ZipFileHandle zipRoot;
+    /** The zip file object itself.*/
+    public ZipFile zip;
+    /** Locales in the mod.*/
+    public ObjectMap<String, FileHandle> bundles = new ObjectMap<>();
 
     protected boolean enabled = true;
     protected boolean requiresRestart = true;

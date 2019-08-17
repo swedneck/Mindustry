@@ -1,26 +1,25 @@
 package io.anuke.mindustry.mod;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.graphics.Pixmap;
-import io.anuke.arc.graphics.Pixmap.Format;
-import io.anuke.arc.graphics.Texture.TextureFilter;
-import io.anuke.arc.graphics.g2d.PixmapPacker;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.io.Streams;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.core.Platform;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.Pixmap.*;
+import io.anuke.arc.graphics.Texture.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.io.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.core.*;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Collections;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+import java.io.*;
+import java.util.*;
+import java.util.zip.*;
 
 public class Mods{
     private Array<Mod> allMods = new Array<>();
     private ModLoader loader = Platform.instance.getModLoader();
+    private ObjectSet<String> localesUsed = new ObjectSet<>();
 
     public Array<Mod> all(){
         return allMods;
@@ -28,9 +27,11 @@ public class Mods{
 
     /** Loads all mods in the mod directory. Skips mods that don't work.*/
     public void load(){
+
         for(FileHandle file : Vars.modDirectory.list()){
             try{
                 Mod mod = loader.loadMod(file);
+                loadFiles(mod);
                 allMods.add(mod);
                 mod.requiresRestart = false;
             }catch(IOException e){
@@ -38,6 +39,43 @@ public class Mods{
                 Log.err(e);
             }
         }
+
+        Vars.modLocaleDirectory.deleteDirectory();
+
+        //load up the bundles.
+        for(String used : localesUsed){
+            FileHandle intern = Core.files.internal("bundles/" + used + ".properties");
+            FileHandle dest = Vars.modLocaleDirectory.child(intern.name());
+            if(intern.exists()){
+                intern.copyTo(dest);
+
+                for(Mod mod : allMods){
+                    if(mod.bundles.containsKey(used)){
+                        dest.writeString("\n" + mod.bundles.get(used).readString() + "\n", true);
+                    }
+                }
+            }
+        }
+    }
+
+    private void loadFiles(Mod mod) throws IOException{
+        ZipFile zip = new ZipFile(mod.file.file());
+        mod.zipFiles = Array.with(Collections.list(zip.entries()).toArray(new ZipEntry[0])).map(entry -> new ZipFileHandle(entry, zip));
+        mod.zipFiles.add(mod.zipRoot = new ZipFileHandle());
+        mod.zipFiles.each(f -> f.init(mod.zipFiles));
+
+        int bundles = 0;
+
+        //load bundles.
+        for(FileHandle bundle : mod.zipRoot.child("bundles").list()){
+            if(bundle.extension().equals("properties") && bundle.name().startsWith("bundle")){
+                bundles ++;
+                localesUsed.add(bundle.nameWithoutExtension());
+                mod.bundles.put(bundle.nameWithoutExtension(), bundle);
+            }
+        }
+
+        Log.info("Found {0} bundles for mod '{1}'.", bundles, mod.meta.name);
     }
 
     public void packSprites(){
@@ -45,18 +83,14 @@ public class Mods{
         for(Mod mod : allMods){
             try{
                 int packed = 0;
-                try(ZipFile zip = new ZipFile(mod.file.file())){
-                    for(ZipEntry entry : Collections.list(zip.entries())){
-                        if(entry.getName().startsWith("sprites/") && entry.getName().toLowerCase().endsWith(".png")){
-                            String fileName = entry.getName().substring(entry.getName().lastIndexOf('/') + 1);
-                            fileName = fileName.substring(0, fileName.length() - 4);
-                            try(InputStream stream = zip.getInputStream(entry)){
-                                byte[] bytes = Streams.copyStreamToByteArray(stream, Math.max((int)entry.getSize(), 512));
-                                Pixmap pixmap = new Pixmap(bytes, 0, bytes.length);
-                                packer.pack(mod.meta.name + ":" + fileName, pixmap);
-                                pixmap.dispose();
-                                packed ++;
-                            }
+                for(FileHandle file : mod.zipRoot.child("sprites").list()){
+                    if(file.extension().equals("png")){
+                        try(InputStream stream = file.read()){
+                            byte[] bytes = Streams.copyStreamToByteArray(stream, Math.max((int)file.length(), 512));
+                            Pixmap pixmap = new Pixmap(bytes, 0, bytes.length);
+                            packer.pack(mod.meta.name + ":" + file.nameWithoutExtension(), pixmap);
+                            pixmap.dispose();
+                            packed ++;
                         }
                     }
                 }
@@ -73,7 +107,6 @@ public class Mods{
 
     public void removeMod(Mod mod){
         mod.file.delete();
-
     }
 
     public void importMod(FileHandle file) throws IOException{
@@ -92,6 +125,85 @@ public class Mods{
         }catch(Throwable t){
             dest.delete();
             throw new IOException(t);
+        }
+    }
+
+    public class ZipFileHandle extends FileHandleStream{
+        private ZipFileHandle[] children = {};
+        private ZipFileHandle parent;
+
+        private final ZipEntry entry;
+        private final ZipFile zip;
+
+        public ZipFileHandle(){
+            super("");
+            zip = null;
+            entry = null;
+        }
+
+        public ZipFileHandle(ZipEntry entry, ZipFile file){
+            super(entry.getName());
+            this.entry = entry;
+            this.zip = file;
+        }
+
+        private void init(Array<ZipFileHandle> files){
+            parent = files.find(other -> other != this && path().startsWith(other.path()) && !path().substring(1 + other.path().length()).contains("/"));
+
+            if(isDirectory()){
+                children = files.select(z -> z != this && z.path().startsWith(path()) && !z.path().substring(1 + path().length()).contains("/")).toArray(ZipFileHandle.class);
+            }
+        }
+
+        @Override
+        public FileHandle child(String name){
+            for(ZipFileHandle child : children){
+                if(child.name().equals(name)){
+                    return child;
+                }
+            }
+            return new FileHandle(new File(file, name)){
+                @Override
+                public boolean exists(){
+                    return false;
+                }
+            };
+        }
+
+        @Override
+        public String name(){
+            return file.getName();
+        }
+
+
+        @Override
+        public FileHandle parent(){
+            return parent;
+        }
+
+        @Override
+        public FileHandle[] list(){
+            return children;
+        }
+
+        @Override
+        public boolean isDirectory(){
+            return entry == null || entry.isDirectory();
+        }
+
+        @Override
+        public InputStream read(){
+            if(entry == null) throw new RuntimeException("Not permitted.");
+            try{
+                return zip.getInputStream(entry);
+            }catch(IOException e){
+                throw new RuntimeException(e);
+            }
+        }
+
+        @Override
+        public long length(){
+            return isDirectory() ? 0 : entry.getSize();
         }
     }
 }

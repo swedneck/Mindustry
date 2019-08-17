@@ -121,6 +121,8 @@ public class Vars{
     public static FileHandle saveDirectory;
     /** data subdirectory used for mod jars */
     public static FileHandle modDirectory;
+    /** data subdirectory used for mod-specific locale copying */
+    public static FileHandle modLocaleDirectory;
     /** old map file extension, for conversion */
     public static final String oldMapExtension = "mmap";
     /** map file extension */
@@ -228,6 +230,7 @@ public class Vars{
         saveDirectory = dataDirectory.child("saves/");
         tmpDirectory = dataDirectory.child("tmp/");
         modDirectory = dataDirectory.child("mods/");
+        modLocaleDirectory = dataDirectory.child("locales/");
 
         mods.load();
     }
