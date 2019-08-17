@@ -8,7 +8,7 @@ import io.anuke.arc.graphics.Pixmap.Format;
 import io.anuke.arc.graphics.Texture.TextureFilter;
 import io.anuke.arc.graphics.g2d.PixmapPacker;
 import io.anuke.arc.util.Log;
-import io.anuke.arc.util.io.StreamUtils;
+import io.anuke.arc.util.io.Streams;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.core.Platform;
 
@@ -51,7 +51,7 @@ public class Mods{
                             String fileName = entry.getName().substring(entry.getName().lastIndexOf('/') + 1);
                             fileName = fileName.substring(0, fileName.length() - 4);
                             try(InputStream stream = zip.getInputStream(entry)){
-                                byte[] bytes = StreamUtils.copyStreamToByteArray(stream, Math.max((int)entry.getSize(), 512));
+                                byte[] bytes = Streams.copyStreamToByteArray(stream, Math.max((int)entry.getSize(), 512));
                                 Pixmap pixmap = new Pixmap(bytes, 0, bytes.length);
                                 packer.pack(mod.meta.name + ":" + fileName, pixmap);
                                 pixmap.dispose();

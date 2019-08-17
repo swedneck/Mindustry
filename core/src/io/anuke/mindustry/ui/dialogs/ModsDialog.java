@@ -26,7 +26,7 @@ public class ModsDialog extends FloatingDialog{
                 for(Mod mod : mods.all()){
                     table.table("pane", t -> {
                         t.defaults().pad(2).left().top();
-                        t.margin(10f).left();
+                        t.margin(14f).left();
                         t.add("[accent]" + mod.meta.name + "[lightgray] v" + mod.meta.version);
                         t.row();
                         t.label(() -> mod.isEnabled() ? "$mod.enabled" : "$mod.disabled");
@@ -63,7 +63,7 @@ public class ModsDialog extends FloatingDialog{
                     ui.showError(e.getMessage());
                     e.printStackTrace();
                 }
-            }, true, "jar");
-        }).margin(10f);
+            }, true, s -> s.equals("jar"));
+        }).margin(10f).width(500f);
     }
 }
