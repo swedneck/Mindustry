@@ -15,8 +15,8 @@ import java.io.IOException;
 import java.nio.file.*;
 
 public class ImagePacker{
-    static ObjectMap<String, TextureRegion> regionCache = new ObjectMap<>();
-    static ObjectMap<TextureRegion, BufferedImage> imageCache = new ObjectMap<>();
+    public static ObjectMap<String, TextureRegion> regionCache = new ObjectMap<>();
+    public static ObjectMap<TextureRegion, BufferedImage> imageCache = new ObjectMap<>();
 
     public static void main(String[] args) throws IOException{
         Vars.headless = true;

@@ -16,6 +16,8 @@ import java.io.*;
 import java.util.*;
 import java.util.zip.*;
 
+import static io.anuke.mindustry.Vars.*;
+
 public class Mods{
     private Array<Mod> allMods = new Array<>();
     private ModLoader loader = Platform.instance.getModLoader();
@@ -36,6 +38,7 @@ public class Mods{
                 mod.requiresRestart = false;
             }catch(IOException e){
                 Log.info("Failed to load mod {0}!", file.name());
+                if(!headless) ui.showError(file.nameWithoutExtension() + ":\n" + Strings.parseException(e, true));
                 Log.err(e);
             }
         }
@@ -79,7 +82,7 @@ public class Mods{
     }
 
     public void packSprites(){
-        PixmapPacker packer = new PixmapPacker(1024, 1024, Format.RGBA8888, 2, true);
+        PixmapPacker packer = new PixmapPacker(2048, 2048, Format.RGBA8888, 2, true);
         for(Mod mod : allMods){
             try{
                 int packed = 0;
@@ -98,6 +101,7 @@ public class Mods{
             }catch(IOException e){
                 Log.err("Error packing images for mod: {0}", mod.meta.name);
                 e.printStackTrace();
+                if(!headless) ui.showError(mod.meta.name + ":\n" + Strings.parseException(e, true));
             }
         }
 
