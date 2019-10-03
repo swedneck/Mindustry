@@ -38,7 +38,7 @@ import io.anuke.mindustry.ui.fragments.*;
 import static io.anuke.arc.scene.actions.Actions.*;
 import static io.anuke.mindustry.Vars.*;
 
-public class UI implements ApplicationListener, Loadable{
+public class UI implements ApplicationListener, AssetManager.Loadable{
     public MenuFragment menufrag;
     public HudFragment hudfrag;
     public ChatFragment chatfrag;

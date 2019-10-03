@@ -24,7 +24,7 @@ import java.net.*;
 
 import static io.anuke.mindustry.Vars.*;
 
-public class Mods implements Loadable{
+public class Mods implements AssetManager.Loadable{
     private Json json = new Json();
     private ContentParser parser = new ContentParser();
     private ObjectMap<String, Array<FileHandle>> bundles = new ObjectMap<>();

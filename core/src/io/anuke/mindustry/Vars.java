@@ -28,7 +28,7 @@ import java.util.*;
 import static io.anuke.arc.Core.*;
 
 @SuppressWarnings("unchecked")
-public class Vars implements Loadable{
+public class Vars implements AssetManager.Loadable{
     /** Whether to load locales.*/
     public static boolean loadLocales = true;
     /** Maximum number of broken blocks. TODO implement or remove.*/

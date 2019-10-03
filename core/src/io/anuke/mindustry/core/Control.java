@@ -36,7 +36,7 @@ import static io.anuke.mindustry.Vars.net;
  * Should <i>not</i> handle any logic-critical state.
  * This class is not created in the headless server.
  */
-public class Control implements ApplicationListener, Loadable{
+public class Control implements ApplicationListener, AssetManager.Loadable{
     public Saves saves;
     public MusicControl music;
     public Tutorial tutorial;
